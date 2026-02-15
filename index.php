@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CCS Sit-in Monitoring</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+    <h2>College of Computer Studies Sit-in Monitoring System</h2>
+    <nav>
+        <a href="index.php">Home</a>
+        <a href="login.php">Login</a>
+        <a href="register.php">Register</a>
+    </nav>
+</header>
+
+<section class="hero">
+    <div class="hero-text">
+        <h1>Welcome Students 👋</h1>
+        <p>Monitor laboratory sit-in attendance easily and securely.</p>
+        <a class="btn" href="register.php">Get Started</a>
+    </div>
+
+    <img src="image.png" class="hero-img">
+</section>
+
+<script src="script.js"></script>
+</body>
+</html>
