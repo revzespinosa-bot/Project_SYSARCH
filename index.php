@@ -2,7 +2,7 @@
 <html>
 <head>
     <title>CCS Sit-in Monitoring</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 
@@ -21,10 +21,9 @@
         <p>Monitor laboratory sit-in attendance easily and securely.</p>
         <a class="btn" href="register.php">Get Started</a>
     </div>
-
-    <img src="image.png" class="hero-img">
+    <img src="image.png" class="hero-img" alt="Student Image">
 </section>
 
-<script src="script.js"></script>
+<script src="js/script.js"></script>
 </body>
 </html>

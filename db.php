@@ -1,7 +1,12 @@
 <?php
-$conn = new mysqli("localhost", "root", "", "sitin_db");
+$servername = "localhost";
+$username = "root";
+$password = "";
+$dbname = "sitin_db";
 
-if ($conn->connect_error) {
-    die("Connection failed: " . $conn->connect_error);
+$conn = mysqli_connect($servername, $username, $password, $dbname);
+
+if (!$conn) {
+    die("Connection failed: " . mysqli_connect_error());
 }
 ?>
