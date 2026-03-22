@@ -16,7 +16,8 @@ if(isset($_SESSION['id_number'])){
     <a href="index.php" class="back-btn2">⬅ Back to Home</a>
 
     <div class="card">
-        <h2>Student Login</h2>
+        <h2>Login</h2>
+       
         <form action="process_login.php" method="POST">
             <input type="text" name="id_number" placeholder="ID Number" required>
             <input type="password" name="password" placeholder="Password" required>

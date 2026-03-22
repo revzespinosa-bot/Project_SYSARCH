@@ -6,12 +6,13 @@
 </head>
 <body>
 
-<header>
-    <h2>College of Computer Studies Sit-in Monitoring System</h2>
-    <nav>
+<header class="topbar">
+    <div class="topbar-left"><h2>College of Computer Studies Sit-in Monitoring System</h2></div>
+    <nav class="topbar-nav">
         <a href="index.php">Home</a>
         <a href="login.php">Login</a>
         <a href="register.php">Register</a>
+        <a href="login.php" class="warn-link">Admin Login</a>
     </nav>
 </header>
 
