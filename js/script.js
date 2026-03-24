@@ -44,40 +44,75 @@ function toggleEdit() {
 // Admin Dashboard modals
 function openFeature(modalId) {
     const modal = document.getElementById(modalId);
-    if (modal) modal.style.display = "block";
+    if (modal) {
+        modal.style.display = "block";
+        document.body.style.overflow = "hidden"; // Prevent background scroll
+    }
 }
 
 function closeFeature(modalId) {
     const modal = document.getElementById(modalId);
-    if (modal) modal.style.display = "none";
-}
-
-function scrollToSearch() {
-    const section = document.getElementById("student-search");
-    if (section) {
-        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (modal) {
+        modal.style.display = "none";
+        document.body.style.overflow = "auto"; // Restore scroll
     }
 }
 
+// ✅ FIXED: Sit-in Form Function
+function openSitInForm(id, name) {
+    console.log("✅ Sit-in clicked! ID:", id, "Name:", name); // Debug log
+    
+    const modal = document.getElementById("sitInFormModal");
+    const idField = document.getElementById("sitin_id");
+    const nameField = document.getElementById("sitin_name");
+    
+    if (!modal) {
+        console.error("❌ sitInFormModal not found!");
+        alert("Sit-in form not found. Please refresh the page.");
+        return;
+    }
+    
+    if (!idField || !nameField) {
+        console.error("❌ Form fields not found!");
+        alert("Form fields missing. Please refresh the page.");
+        return;
+    }
+    
+    // Fill the form
+    idField.value = id;
+    nameField.value = name;
+    
+    // Show modal
+    modal.style.display = "block";
+    document.body.style.overflow = "hidden";
+    
+    console.log("✅ Sit-in form opened successfully!");
+}
+
+// Close modals when clicking outside
 window.onclick = function(event) {
-    const editModal = document.getElementById("editModal");
-    if (editModal && event.target == editModal) {
-        closeModal();
-    }
-
     const modals = document.querySelectorAll(".admin-modal");
     modals.forEach(function(modal) {
-        if (event.target == modal) {
+        if (event.target === modal) {
             modal.style.display = "none";
+            document.body.style.overflow = "auto";
         }
     });
 };
 
+// ESC key to close modals
 document.addEventListener("keydown", function(event) {
     if (event.key === "Escape") {
-        closeModal();
         document.querySelectorAll('.admin-modal').forEach(function(modal){
             modal.style.display = 'none';
         });
+        document.body.style.overflow = "auto";
     }
+});
+
+// Auto-open search modal if search parameter exists
+document.addEventListener('DOMContentLoaded', function() {
+    <?php if (!empty($search)) : ?>
+        openFeature('searchModal');
+    <?php endif; ?>
 });

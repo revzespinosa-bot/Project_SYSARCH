@@ -17,7 +17,8 @@ if (isset($_SESSION['is_admin']) && $_SESSION['is_admin']) {
 $id = $_SESSION['id_number'];
 
 // Use Prepared Statement
-$stmt = $conn->prepare("SELECT * FROM students WHERE id_number = ?");
+// In student dashboard, after fetching user data, add:
+$stmt = $conn->prepare("SELECT id_number, first_name, last_name, middle_name, course, year_level, email, address, photo, COALESCE(remaining_sessions, 28) as remaining_sessions FROM students WHERE id_number = ?");
 $stmt->bind_param("s", $id);
 $stmt->execute();
 $result = $stmt->get_result();
@@ -121,7 +122,7 @@ $reservationQuery->close();
                 <p>🔢 <strong>Year Level:</strong> <?php echo htmlspecialchars($user['year_level']); ?></p>
                 <p>✉️ <strong>Email:</strong> <?php echo htmlspecialchars($user['email']); ?></p>
                 <p>🏠 <strong>Address:</strong> <?php echo htmlspecialchars($user['address']); ?></p>
-                <p>📶 <strong>Session:</strong> <?php echo isset($user['session']) ? htmlspecialchars($user['session']) : 'N/A'; ?></p>
+               <p>📶 <strong>Sessions Left:</strong> <span style="color:#10b981; font-weight:bold; font-size:18px;"><?php echo $user['remaining_sessions']; ?></span></p>
             </div>
 
             <button class="save-btn" onclick="openModal()">✏️ Edit Profile</button>
@@ -291,8 +292,8 @@ $reservationQuery->close();
             <label>Date</label>
             <input type="date" name="date" required>
 
-            <label>Remaining Session</label>
-            <input type="number" name="remaining_sessions" value="<?php echo isset($user['session']) ? (int)$user['session'] : 28; ?>" min="0" required>
+            <label>Remaining Sessions</label>
+<input type="number" name="remaining_sessions" value="<?php echo $user['remaining_sessions']; ?>" min="1" max="<?php echo $user['remaining_sessions']; ?>" required readonly>
 
             <div style="display:flex; gap:10px; margin-top:12px;">
                 <button type="submit" class="save-btn">Reserve</button>
