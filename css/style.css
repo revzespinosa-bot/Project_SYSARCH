@@ -900,11 +900,24 @@ table th, table td {
     border-radius: 8px;
     cursor: pointer;
     font-size: 14px;
-    margin-right: 10px;
 }
 
 .edit-btn:hover {
     background: #1d4ed8;
+}
+
+.delete-btn {
+    background: #dc2626;
+    color: white;
+    padding: 10px 16px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.delete-btn:hover {
+    background: #b91c1c;
 }
 
 /* ... rest of existing styles ... */

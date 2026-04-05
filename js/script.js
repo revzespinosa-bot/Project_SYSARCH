@@ -7,9 +7,13 @@ if (img) {
     }, 30);
 }
 
+// Open Modal (for edit profile)
 function openModal() {
     const modal = document.getElementById("editModal");
-    if (modal) modal.style.display = "block";
+    if (modal) {
+        modal.style.display = "block";
+        document.body.style.overflow = "hidden";
+    }
     const viewMode = document.getElementById("viewMode");
     const editMode = document.getElementById("editMode");
     const modalTitle = document.getElementById("modalTitle");
@@ -18,9 +22,13 @@ function openModal() {
     if (modalTitle) modalTitle.textContent = "👤 Student Profile";
 }
 
+// Close Modal (for edit profile)
 function closeModal() {
     const modal = document.getElementById("editModal");
-    if (modal) modal.style.display = "none";
+    if (modal) {
+        modal.style.display = "none";
+        document.body.style.overflow = "auto";
+    }
 }
 
 function toggleEdit() {
@@ -91,7 +99,7 @@ function openSitInForm(id, name) {
 
 // Close modals when clicking outside
 window.onclick = function(event) {
-    const modals = document.querySelectorAll(".admin-modal");
+    const modals = document.querySelectorAll(".modal, .admin-modal");
     modals.forEach(function(modal) {
         if (event.target === modal) {
             modal.style.display = "none";
@@ -103,7 +111,7 @@ window.onclick = function(event) {
 // ESC key to close modals
 document.addEventListener("keydown", function(event) {
     if (event.key === "Escape") {
-        document.querySelectorAll('.admin-modal').forEach(function(modal){
+        document.querySelectorAll('.modal, .admin-modal').forEach(function(modal){
             modal.style.display = 'none';
         });
         document.body.style.overflow = "auto";
@@ -112,7 +120,8 @@ document.addEventListener("keydown", function(event) {
 
 // Auto-open search modal if search parameter exists
 document.addEventListener('DOMContentLoaded', function() {
-    <?php if (!empty($search)) : ?>
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has('search')) {
         openFeature('searchModal');
-    <?php endif; ?>
+    }
 });
