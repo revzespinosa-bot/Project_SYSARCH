@@ -514,8 +514,8 @@ $hasAnyFeedback->close();
     </div>
 </div>
 
-<div id="reservationModal" class="admin-modal">
-    <div class="admin-modal-content">
+<div id="reservationModal" class="admin-modal" style="display:none; position:fixed; z-index:1100; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.6);">
+    <div class="admin-modal-content" style="position:absolute; top:40%; left:50%; transform:translate(-50%, -40%); background:white; margin:0; padding:25px; border-radius:14px; width:90%; max-width:540px;">
         <span class="close-modal" onclick="closeFeature('reservationModal')">&times;</span>
         <h3>🗓 Student Sit-in Reservation</h3>
 
