@@ -1,7 +1,10 @@
-body{
+body.register-page {
     font-family: Arial;
-    background: #f4f6fb;
-    margin:0;
+    background: url('../image1.png') no-repeat center left;
+    background-size: auto 100%;
+    background-color: #f4f6fb;
+    margin: 0;
+    min-height: 100vh;
 }
 
 /* HEADER */
@@ -173,6 +176,32 @@ header nav a {
     border-radius:15px;
     box-shadow:0 10px 25px rgba(0,0,0,0.1);
     text-align:center;
+}
+
+.register-page .card {
+    background: rgba(255, 255, 255, 0.98);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+}
+
+.register-header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.register-icon {
+    width: 80px;
+    height: 80px;
+    margin-bottom: 15px;
+    border-radius: 50%;
+    padding: 15px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    box-shadow: 0 8px 20px rgba(102,126,234,0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .card input{
@@ -1185,5 +1214,287 @@ table th, table td {
     .modern-form-container {
         margin: 20px 10px;
         width: calc(100% - 20px);
+    }
+}
+
+/* EXPORT BUTTONS */
+.export-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.export-btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.export-btn.csv {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white;
+}
+
+.export-btn.csv:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+}
+
+.export-btn.excel {
+    background: linear-gradient(135deg, #22c55e, #16a34a);
+    color: white;
+}
+
+.export-btn.excel:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(34, 197, 94, 0.4);
+}
+
+.export-btn.pdf {
+    background: linear-gradient(135deg, #6366f1, #4f46e5);
+    color: white;
+}
+
+.export-btn.pdf:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+}
+
+/* LEADERBOARD STYLES */
+.leaderboard-section {
+    background: linear-gradient(145deg, #ffffff, #f8fafc);
+    border-radius: 24px;
+    padding: 28px;
+    margin-top: 24px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
+    border: 1px solid rgba(99, 102, 241, 0.1);
+}
+
+.leaderboard-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+}
+
+.leaderboard-header h3 {
+    margin: 0;
+    font-size: 24px;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.leaderboard-subtitle {
+    font-size: 14px;
+    color: #94a3b8;
+    font-weight: 500;
+}
+
+.leaderboard-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 28px;
+}
+
+.stat-card {
+    background: white;
+    border-radius: 16px;
+    padding: 18px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+    border: 1px solid #f1f5f9;
+    transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.stat-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+}
+
+.stat-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+}
+
+.stat-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.stat-value {
+    font-size: 26px;
+    font-weight: 800;
+    color: #1e293b;
+    line-height: 1.1;
+}
+
+.stat-label {
+    font-size: 12px;
+    color: #94a3b8;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.leaderboard-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.leaderboard-item {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px 20px;
+    background: white;
+    border-radius: 16px;
+    border: 1px solid #f1f5f9;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.leaderboard-item:hover {
+    transform: translateX(6px);
+    box-shadow: 0 6px 20px rgba(99, 102, 241, 0.15);
+    border-color: rgba(99, 102, 241, 0.3);
+}
+
+.leaderboard-item.top-1 {
+    background: linear-gradient(135deg, #fef3c7, #fef9c3);
+    border: 2px solid #f59e0b;
+}
+
+.leaderboard-item.top-2 {
+    background: linear-gradient(135deg, #f1f5f9, #e2e8f0);
+    border: 2px solid #94a3b8;
+}
+
+.leaderboard-item.top-3 {
+    background: linear-gradient(135deg, #fff7ed, #ffedd5);
+    border: 2px solid #fb923c;
+}
+
+.rank-badge {
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.medal {
+    font-size: 28px;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.15));
+}
+
+.rank-num {
+    width: 36px;
+    height: 36px;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: white;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 16px;
+}
+
+.student-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.student-name {
+    font-weight: 700;
+    font-size: 16px;
+    color: #1e293b;
+}
+
+.student-id {
+    font-size: 13px;
+    color: #94a3b8;
+    font-weight: 500;
+}
+
+.student-stats {
+    display: flex;
+    gap: 10px;
+}
+
+.stat-pill {
+    background: linear-gradient(135deg, #f0fdf4, #dcfce7);
+    padding: 8px 14px;
+    border-radius: 20px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid #86efac;
+}
+
+.stat-pill.sessions {
+    background: linear-gradient(135deg, #eff6ff, #dbeafe);
+    border-color: #93c5fd;
+}
+
+.pill-value {
+    font-weight: 800;
+    color: #166534;
+    font-size: 15px;
+}
+
+.stat-pill.sessions .pill-value {
+    color: #1d4ed8;
+}
+
+.pill-label {
+    font-size: 11px;
+    color: #15803d;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.stat-pill.sessions .pill-label {
+    color: #1d4ed8;
+}
+
+.no-data {
+    text-align: center;
+    padding: 40px;
+    color: #94a3b8;
+    font-size: 15px;
+    background: #f8fafc;
+    border-radius: 16px;
+    border: 2px dashed #e2e8f0;
+}
+
+@media (max-width: 768px) {
+    .leaderboard-stats {
+        grid-template-columns: 1fr;
+    }
+    .leaderboard-item {
+        flex-wrap: wrap;
+    }
+    .student-stats {
+        width: 100%;
+        justify-content: flex-start;
     }
 }

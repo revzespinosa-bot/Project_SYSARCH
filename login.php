@@ -12,10 +12,10 @@ if(isset($_SESSION['id_number'])){
     <title>Login</title>
     <link rel="stylesheet" href="css/style.css">
 </head>
-<body>
-    <a href="index.php" class="back-btn2">⬅ Back to Home</a>
+<body style="background-image: url('UC.png'); background-size: cover; background-position: center; background-repeat: no-repeat; min-height: 100vh; display: flex; justify-content: center; align-items: center; flex-direction: column;">
+    <a href="index.php" class="back-btn2" style="position: absolute; top: 20px; left: 20px;">⬅ Back to Home</a>
 
-    <div class="card">
+    <div class="card" style="background: rgba(255,255,255,0.95);">
         <h2>Login</h2>
        
         <form action="process_login.php" method="POST">

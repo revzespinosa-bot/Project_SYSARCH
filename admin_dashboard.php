@@ -1,11 +1,90 @@
-    <?php
-    session_start();
-    include 'db.php';
+<?php
+session_start();
+include 'db.php';
 
-    if (!isset($_SESSION['id_number']) || !isset($_SESSION['is_admin']) || !$_SESSION['is_admin']) {
-        header('Location: login.php');
+if (!isset($_SESSION['id_number']) || !isset($_SESSION['is_admin']) || !$_SESSION['is_admin']) {
+    header('Location: login.php');
+    exit();
+}
+
+if (isset($_GET['export']) && $_GET['export'] !== '') {
+    $export = $_GET['export'];
+    $date_from = isset($_GET['date_from']) ? $_GET['date_from'] : date('Y-m-01');
+    $date_to = isset($_GET['date_to']) ? $_GET['date_to'] : date('Y-m-t');
+    $date_from_safe = $conn->real_escape_string($date_from);
+    $date_to_safe = $conn->real_escape_string($date_to);
+    
+    $query = "SELECT id_number, student_name, purpose, lab, sessions_used, time_out 
+              FROM sitin_history 
+              WHERE time_out BETWEEN '$date_from_safe 00:00:00' AND '$date_to_safe 23:59:59'
+              ORDER BY time_out DESC";
+    $result = $conn->query($query);
+    
+    $data = [];
+    if ($result && $result->num_rows > 0) {
+        while ($row = $result->fetch_assoc()) {
+            $data[] = $row;
+        }
+    }
+    
+    if ($export === 'csv') {
+        header('Content-Type: text/csv');
+        header('Content-Disposition: attachment; filename="sit_in_report_' . date('Y-m-d') . '.csv"');
+        $output = fopen('php://output', 'w');
+        fputcsv($output, ['ID Number', 'Name', 'Purpose', 'Lab', 'Sessions Used', 'Time Out']);
+        foreach ($data as $row) {
+            fputcsv($output, [
+                $row['id_number'],
+                $row['student_name'],
+                $row['purpose'],
+                $row['lab'],
+                $row['sessions_used'],
+                date('Y-m-d H:i:s', strtotime($row['time_out']))
+            ]);
+        }
+        fclose($output);
+        exit();
+    } elseif ($export === 'excel') {
+        header('Content-Type: application/vnd.ms-excel');
+        header('Content-Disposition: attachment; filename="sit_in_report_' . date('Y-m-d') . '.xls"');
+        echo '<table border="1">';
+        echo '<tr><th>ID Number</th><th>Name</th><th>Purpose</th><th>Lab</th><th>Sessions Used</th><th>Time Out</th></tr>';
+        foreach ($data as $row) {
+            echo '<tr>';
+            echo '<td>' . htmlspecialchars($row['id_number']) . '</td>';
+            echo '<td>' . htmlspecialchars($row['student_name']) . '</td>';
+            echo '<td>' . htmlspecialchars($row['purpose']) . '</td>';
+            echo '<td>' . htmlspecialchars($row['lab']) . '</td>';
+            echo '<td>' . $row['sessions_used'] . '</td>';
+            echo '<td>' . date('Y-m-d H:i:s', strtotime($row['time_out'])) . '</td>';
+            echo '</tr>';
+        }
+        echo '</table>';
+        exit();
+    } elseif ($export === 'pdf') {
+        header('Content-Type: text/html');
+        header('Content-Disposition: attachment; filename="sit_in_report_' . date('Y-m-d') . '.html"');
+        echo '<!DOCTYPE html>';
+        echo '<html><head><title>Sit-in Report</title>';
+        echo '<style>body{font-family:Arial,sans-serif;padding:20px;}h1{color:#333;}table{border-collapse:collapse;width:100%;margin-top:20px;}th,td{border:1px solid #ddd;padding:10px;text-align:left;}th{background:#4f46e5;color:white;}</style>';
+        echo '</head><body>';
+        echo '<h1>Sit-in Report</h1>';
+        echo '<p>Date Range: ' . date('M j, Y', strtotime($date_from)) . ' to ' . date('M j, Y', strtotime($date_to)) . '</p>';
+        echo '<table><tr><th>ID Number</th><th>Name</th><th>Purpose</th><th>Lab</th><th>Sessions</th><th>Time Out</th></tr>';
+        foreach ($data as $row) {
+            echo '<tr>';
+            echo '<td>' . htmlspecialchars($row['id_number']) . '</td>';
+            echo '<td>' . htmlspecialchars($row['student_name']) . '</td>';
+            echo '<td>' . htmlspecialchars($row['purpose']) . '</td>';
+            echo '<td>' . htmlspecialchars($row['lab']) . '</td>';
+            echo '<td>' . $row['sessions_used'] . '</td>';
+            echo '<td>' . date('M j, Y g:i A', strtotime($row['time_out'])) . '</td>';
+            echo '</tr>';
+        }
+        echo '</table></body></html>';
         exit();
     }
+}
 
     // Ensure the admin profile table exists
     $conn->query("CREATE TABLE IF NOT EXISTS admin_profile (
@@ -323,6 +402,21 @@ $sitinRes = $conn->query("
     ORDER BY sr.created_at DESC
 ");
 
+$leaderboardQuery = "SELECT 
+    id_number,
+    student_name,
+    COUNT(*) as sitin_count,
+    SUM(sessions_used) as total_sessions
+FROM sitin_history 
+GROUP BY id_number, student_name
+ORDER BY sitin_count DESC
+LIMIT 10";
+$leaderboardResult = $conn->query($leaderboardQuery);
+
+$totalSitinsAllTime = $conn->query("SELECT COUNT(*) as total FROM sitin_history")->fetch_assoc()['total'];
+$totalSessionsUsed = $conn->query("SELECT COALESCE(SUM(sessions_used), 0) as total FROM sitin_history")->fetch_assoc()['total'];
+$totalStudentsSitin = $conn->query("SELECT COUNT(DISTINCT id_number) as total FROM sitin_history")->fetch_assoc()['total'];
+
 
     ?>
     <!DOCTYPE html>
@@ -345,6 +439,7 @@ $sitinRes = $conn->query("
             <h3>Admin Menu</h3>
             <ul>
                 <li><button type="button" onclick="openFeature('homeModal')">Home</button></li>
+                <li><button type="button" onclick="openFeature('leaderboardModal')">Leaderboard</button></li>
                 <li><button type="button" onclick="openFeature('searchModal')">Search Students</button></li>
                 <li><button type="button" onclick="openFeature('currentSitInModal')">Current Sit-in</button></li>
                 <li><button type="button" onclick="openFeature('recordsModal')">View Sit-in Records</button></li>
@@ -364,6 +459,68 @@ $sitinRes = $conn->query("
                 <p><strong>Email:</strong> <?php echo htmlspecialchars($adminProfile['email']); ?></p>
                 <p><strong>Phone:</strong> <?php echo htmlspecialchars($adminProfile['phone']); ?></p>
                 <p><strong>Total Registered Students:</strong> <?php echo $total_students; ?></p>
+            </section>
+
+            <section class="leaderboard-section">
+                <div class="leaderboard-header">
+                    <h3>🏆 Top Sit-in Students</h3>
+                    <span class="leaderboard-subtitle">All-time leaderboard</span>
+                </div>
+                <div class="leaderboard-stats">
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #f59e0b, #d97706);">🏅</div>
+                        <div class="stat-info">
+                            <span class="stat-value"><?php echo $totalSitinsAllTime; ?></span>
+                            <span class="stat-label">Total Sit-ins</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #10b981, #059669);">⏱️</div>
+                        <div class="stat-info">
+                            <span class="stat-value"><?php echo $totalSessionsUsed; ?></span>
+                            <span class="stat-label">Sessions Used</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #6366f1, #4f46e5);">👥</div>
+                        <div class="stat-info">
+                            <span class="stat-value"><?php echo $totalStudentsSitin; ?></span>
+                            <span class="stat-label">Unique Students</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="leaderboard-list">
+                    <?php $rank = 1; ?>
+                    <?php if ($leaderboardResult && $leaderboardResult->num_rows > 0): ?>
+                        <?php while ($row = $leaderboardResult->fetch_assoc()): ?>
+                            <div class="leaderboard-item <?php echo $rank <= 3 ? 'top-' . $rank : ''; ?>">
+                                <div class="rank-badge">
+                                    <?php if ($rank === 1): ?><span class="medal gold">🥇</span>
+                                    <?php elseif ($rank === 2): ?><span class="medal silver">🥈</span>
+                                    <?php elseif ($rank === 3): ?><span class="medal bronze">🥉</span>
+                                    <?php else: ?><span class="rank-num"><?php echo $rank; ?></span><?php endif; ?>
+                                </div>
+                                <div class="student-info">
+                                    <span class="student-name"><?php echo htmlspecialchars($row['student_name']); ?></span>
+                                    <span class="student-id"><?php echo htmlspecialchars($row['id_number']); ?></span>
+                                </div>
+                                <div class="student-stats">
+                                    <div class="stat-pill">
+                                        <span class="pill-value"><?php echo $row['sitin_count']; ?></span>
+                                        <span class="pill-label">sit-ins</span>
+                                    </div>
+                                    <div class="stat-pill sessions">
+                                        <span class="pill-value"><?php echo $row['total_sessions']; ?></span>
+                                        <span class="pill-label">sessions</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <?php $rank++; ?>
+                        <?php endwhile; ?>
+                    <?php else: ?>
+                        <div class="no-data">No sit-in data yet. Start a sit-in to see the leaderboard!</div>
+                    <?php endif; ?>
+                </div>
             </section>
 
         <!-- SEARCH MODAL TABLE - CORRECTED -->
@@ -515,6 +672,71 @@ if ($search !== '') {
         </div>
     </div>
 
+    <div class="admin-modal" id="leaderboardModal" style="display:none;">
+        <div class="admin-modal-content" style="max-width:700px; width:95%;">
+            <span class="close-modal" onclick="closeFeature('leaderboardModal')">&times;</span>
+            <div style="text-align:center; margin-bottom:30px;">
+                <h3 style="font-size:28px; margin-bottom:8px;">🏆 Leaderboard</h3>
+                <p style="color:#64748b;">Top 10 students with the most sit-ins</p>
+            </div>
+            <div class="leaderboard-stats" style="margin-bottom:30px;">
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: linear-gradient(135deg, #f59e0b, #d97706);">🏅</div>
+                    <div class="stat-info">
+                        <span class="stat-value"><?php echo $totalSitinsAllTime; ?></span>
+                        <span class="stat-label">Total Sit-ins</span>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: linear-gradient(135deg, #10b981, #059669);">⏱️</div>
+                    <div class="stat-info">
+                        <span class="stat-value"><?php echo $totalSessionsUsed; ?></span>
+                        <span class="stat-label">Sessions Used</span>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: linear-gradient(135deg, #6366f1, #4f46e5);">👥</div>
+                    <div class="stat-info">
+                        <span class="stat-value"><?php echo $totalStudentsSitin; ?></span>
+                        <span class="stat-label">Unique Students</span>
+                    </div>
+                </div>
+            </div>
+            <div class="leaderboard-list">
+                <?php $rank = 1; ?>
+                <?php if ($leaderboardResult && $leaderboardResult->num_rows > 0): ?>
+                    <?php while ($row = $leaderboardResult->fetch_assoc()): ?>
+                        <div class="leaderboard-item <?php echo $rank <= 3 ? 'top-' . $rank : ''; ?>">
+                            <div class="rank-badge">
+                                <?php if ($rank === 1): ?><span class="medal gold">🥇</span>
+                                <?php elseif ($rank === 2): ?><span class="medal silver">🥈</span>
+                                <?php elseif ($rank === 3): ?><span class="medal bronze">🥉</span>
+                                <?php else: ?><span class="rank-num"><?php echo $rank; ?></span><?php endif; ?>
+                            </div>
+                            <div class="student-info">
+                                <span class="student-name"><?php echo htmlspecialchars($row['student_name']); ?></span>
+                                <span class="student-id"><?php echo htmlspecialchars($row['id_number']); ?></span>
+                            </div>
+                            <div class="student-stats">
+                                <div class="stat-pill">
+                                    <span class="pill-value"><?php echo $row['sitin_count']; ?></span>
+                                    <span class="pill-label">sit-ins</span>
+                                </div>
+                                <div class="stat-pill sessions">
+                                    <span class="pill-value"><?php echo $row['total_sessions']; ?></span>
+                                    <span class="pill-label">sessions</span>
+                                </div>
+                            </div>
+                        </div>
+                        <?php $rank++; ?>
+                    <?php endwhile; ?>
+                <?php else: ?>
+                    <div class="no-data">No sit-in data yet. Start a sit-in to see the leaderboard!</div>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+
     <!-- ✅ FIXED MODERN SIT-IN FORM -->
     <div class="admin-modal" id="sitInFormModal" style="display:none;">
         <div class="sitin-form-modern" style="max-width:500px; width:95%; margin:5% auto; background:white; border-radius:20px; box-shadow:0 20px 60px rgba(0,0,0,0.3); padding:30px; position:relative;">
@@ -590,6 +812,11 @@ if ($search !== '') {
         <div class="admin-modal-content" style="max-width:1000px; width:95%;">
             <span class="close-modal" onclick="closeFeature('recordsModal')">&times;</span>
             <h3>📜 Sit-in History</h3>
+            <div style="display:flex; gap:8px; margin-bottom:15px; margin-left:auto;">
+                <button type="button" onclick="exportRecords('csv')" class="export-btn csv">📄 CSV</button>
+                <button type="button" onclick="exportRecords('excel')" class="export-btn excel">📊 Excel</button>
+                <button type="button" onclick="exportRecords('pdf')" class="export-btn pdf">🖨️ Print</button>
+            </div>
             <div class="table-wrap" style="max-height:400px; overflow:auto;">
                 <table>
                     <thead>
@@ -654,6 +881,11 @@ if ($search !== '') {
                     <input type="date" name="date_to" value="<?php echo htmlspecialchars($date_to); ?>">
                 </div>
                 <button type="submit">Filter</button>
+                <div class="export-buttons" style="display:flex; gap:8px; margin-left:auto;">
+                    <button type="button" onclick="exportReport('csv')" class="export-btn csv">📄 CSV</button>
+                    <button type="button" onclick="exportReport('excel')" class="export-btn excel">📊 Excel</button>
+                    <button type="button" onclick="exportReport('pdf')" class="export-btn pdf">🖨️ Print</button>
+                </div>
             </form>
             
             <?php
@@ -1416,6 +1648,21 @@ if ($search !== '') {
             document.body.appendChild(form);
             form.submit();
         }
+    }
+
+    function exportReport(format) {
+        const urlParams = new URLSearchParams(window.location.search);
+        const dateFrom = urlParams.get('date_from') || '<?php echo date('Y-m-01'); ?>';
+        const dateTo = urlParams.get('date_to') || '<?php echo date('Y-m-t'); ?>';
+        
+        let exportUrl = 'admin_dashboard.php?export=' + format + '&date_from=' + dateFrom + '&date_to=' + dateTo;
+        
+        window.open(exportUrl, '_blank');
+    }
+
+    function exportRecords(format) {
+        let exportUrl = 'admin_dashboard.php?export=' + format;
+        window.open(exportUrl, '_blank');
     }
 
     // Auto-open search modal if search exists

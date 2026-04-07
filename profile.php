@@ -205,7 +205,7 @@ $hasAnyFeedback->close();
             <button class="dropbtn">Notification ▼</button>
             <div class="dropdown-content">
                 <a href="#" onclick="openFeature('notificationsModal')">View notifications</a>
-                <a href="#" onclick="closeFeature('notificationsModal')">Clear all</a>
+                
             </div>
         </div>
         <a href="Profile.php">Home</a>
@@ -282,7 +282,7 @@ $hasAnyFeedback->close();
 
 </main>
 
-<!-- MODAL START -->
+<!-- MODAL START -->    
 <div id="editModal" class="modal">
     <div class="modal-content">
         <span class="close" onclick="closeModal()">&times;</span>
@@ -514,8 +514,8 @@ $hasAnyFeedback->close();
     </div>
 </div>
 
-<div id="reservationModal" class="admin-modal" style="display:none; position:fixed; z-index:1100; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.6);">
-    <div class="admin-modal-content" style="position:absolute; top:40%; left:50%; transform:translate(-50%, -40%); background:white; margin:0; padding:25px; border-radius:14px; width:90%; max-width:540px;">
+<div id="reservationModal" class="admin-modal">
+    <div class="admin-modal-content">
         <span class="close-modal" onclick="closeFeature('reservationModal')">&times;</span>
         <h3>🗓 Student Sit-in Reservation</h3>
 
@@ -533,10 +533,30 @@ $hasAnyFeedback->close();
             <input type="text" name="student_name" value="<?php echo htmlspecialchars($user['first_name'].' '.$user['middle_name'].' '.$user['last_name']); ?>" readonly>
 
             <label>Purpose</label>
-            <input type="text" name="purpose" placeholder="e.g. C Programming" required>
+            <select name="purpose" required>
+                <option value="">Select Purpose</option>
+                <option value="C Programming">C Programming</option>
+                <option value="Java Programming">Java Programming</option>
+                <option value="Web Development">Web Development</option>
+                <option value="Database">Database</option>
+                <option value="Networking">Networking</option>
+                <option value="Graphics/Design">Graphics/Design</option>
+                <option value="Research/Homework">Research/Homework</option>
+                <option value="Practice/Review">Practice/Review</option>
+                <option value="Other">Other</option>
+            </select>
 
             <label>Lab</label>
-            <input type="text" name="lab" placeholder="e.g. 524" required>
+            <select name="lab" required>
+                <option value="">Select Lab</option>
+                <option value="524">Lab 524</option>
+                <option value="525">Lab 525</option>
+                <option value="526">Lab 526</option>
+                <option value="527">Lab 527</option>
+                <option value="528">Lab 528</option>
+                <option value="Mac Lab">Mac Lab</option>
+                <option value="Network Lab">Network Lab</option>
+            </select>
 
             <label>Time In</label>
             <input type="time" name="time_in" required>
