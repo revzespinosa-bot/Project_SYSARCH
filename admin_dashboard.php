@@ -377,11 +377,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['logout_student_id']))
         }
     }
 
+    // Handle reset student sessions
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'reset_student_sessions') {
+        $id_number = trim($_POST['id_number']);
+        if ($id_number) {
+            $resetStmt = $conn->prepare("UPDATE students SET remaining_sessions = 30 WHERE id_number=?");
+            $resetStmt->bind_param('s', $id_number);
+            $resetStmt->execute();
+            $resetStmt->close();
+            header("Location: admin_dashboard.php?search=" . urlencode($search) . "&reset=1");
+            exit();
+        }
+    }
+
     // Student search listing
     $search = isset($_GET['search']) ? trim($_GET['search']) : '';
     if ($search !== '') {
         // Update search query to include sessions
-    $stmt = $conn->prepare("SELECT id_number, last_name, first_name, middle_name, course, year_level, email, COALESCE(remaining_sessions, 28) as remaining_sessions FROM students WHERE id_number LIKE ? OR last_name LIKE ? OR first_name LIKE ?");
+    $stmt = $conn->prepare("SELECT id_number, last_name, first_name, middle_name, course, year_level, email, COALESCE(remaining_sessions, 30) as remaining_sessions FROM students WHERE id_number LIKE ? OR last_name LIKE ? OR first_name LIKE ?");
         $like = "%{$search}%";
         $stmt->bind_param('sss', $like, $like, $like);
         $stmt->execute();
@@ -395,7 +408,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['logout_student_id']))
     // Load current sit-in reservations for admin view (only approved = active)
     // Join with students table
 $sitinRes = $conn->query("
-    SELECT sr.*, COALESCE(s.remaining_sessions, 28) as student_sessions_left 
+    SELECT sr.*, COALESCE(s.remaining_sessions, 30) as student_sessions_left 
     FROM sitin_reservations sr 
     LEFT JOIN students s ON sr.id_number = s.id_number 
     WHERE sr.status = 'approved'
@@ -554,13 +567,13 @@ $totalStudentsSitin = $conn->query("SELECT COUNT(DISTINCT id_number) as total FR
     // RELOAD STUDENT RESULTS FOR SEARCH MODAL
     // ✅ FIXED SEARCH QUERY - INCLUDES remaining_sessions
 if ($search !== '') {
-    $stmt = $conn->prepare("SELECT id_number, last_name, first_name, middle_name, course, year_level, email, address, COALESCE(remaining_sessions, 28) as remaining_sessions FROM students WHERE id_number LIKE ? OR last_name LIKE ? OR first_name LIKE ?");
+    $stmt = $conn->prepare("SELECT id_number, last_name, first_name, middle_name, course, year_level, email, address, COALESCE(remaining_sessions, 30) as remaining_sessions FROM students WHERE id_number LIKE ? OR last_name LIKE ? OR first_name LIKE ?");
     $like = "%{$search}%";
     $stmt->bind_param('sss', $like, $like, $like);
     $stmt->execute();
     $searchResult = $stmt->get_result();
 } else {
-    $searchResult = $conn->query("SELECT id_number, last_name, first_name, middle_name, course, year_level, email, address, COALESCE(remaining_sessions, 28) as remaining_sessions FROM students ORDER BY last_name, first_name LIMIT 50");
+    $searchResult = $conn->query("SELECT id_number, last_name, first_name, middle_name, course, year_level, email, address, COALESCE(remaining_sessions, 30) as remaining_sessions FROM students ORDER BY last_name, first_name LIMIT 50");
 }
 
     if ($searchResult && $searchResult->num_rows > 0): ?>
@@ -572,7 +585,7 @@ if ($search !== '') {
                 <td><?php echo htmlspecialchars($student['year_level']); ?></td>
                 <td><?php echo htmlspecialchars($student['email']); ?></td>
 <td style="font-weight:600; color:#10b981;">
-    <?php echo $student['remaining_sessions'] ?? 28; ?>
+    <?php echo $student['remaining_sessions'] ?? 30; ?>
 </td>
 <td style="display:flex; gap:5px;">
     <button class="sitin-btn" type="button" 
@@ -585,6 +598,9 @@ if ($search !== '') {
     <button type="button" class="edit-btn" 
         onclick="openEditStudentModal('<?php echo addslashes($student['id_number']); ?>', '<?php echo addslashes($student['last_name']); ?>', '<?php echo addslashes($student['first_name']); ?>', '<?php echo addslashes($student['middle_name'] ?? ''); ?>', '<?php echo addslashes($student['course']); ?>', '<?php echo addslashes($student['year_level']); ?>', '<?php echo addslashes($student['email']); ?>', '<?php echo addslashes($student['address'] ?? ''); ?>')">
         ✏️ Edit
+    </button>
+    <button type="button" class="reset-btn" onclick="confirmResetSessions('<?php echo addslashes($student['id_number']); ?>')">
+        🔄 Reset
     </button>
     <button type="button" class="delete-btn" onclick="confirmDeleteStudent('<?php echo addslashes($student['id_number']); ?>')">
         🗑️ Delete
@@ -629,7 +645,7 @@ if ($search !== '') {
                     <tbody>
     <?php 
     $sitinResModal = $conn->query("
-        SELECT sr.*, COALESCE(s.remaining_sessions, 28) as remaining_sessions 
+        SELECT sr.*, COALESCE(s.remaining_sessions, 30) as remaining_sessions 
         FROM sitin_reservations sr 
         LEFT JOIN students s ON sr.id_number = s.id_number 
         WHERE sr.status = 'approved'
@@ -676,7 +692,7 @@ if ($search !== '') {
         <div class="admin-modal-content" style="max-width:700px; width:95%;">
             <span class="close-modal" onclick="closeFeature('leaderboardModal')">&times;</span>
             <div style="text-align:center; margin-bottom:30px;">
-                <h3 style="font-size:28px; margin-bottom:8px;">🏆 Leaderboard</h3>
+                <h3 style="font-size:30px; margin-bottom:8px;">🏆 Leaderboard</h3>
                 <p style="color:#64748b;">Top 10 students with the most sit-ins</p>
             </div>
             <div class="leaderboard-stats" style="margin-bottom:30px;">
@@ -747,7 +763,7 @@ if ($search !== '') {
                     <div style="font-size:32px;">🎯</div>
                     <h3 style="margin:0; font-size:24px; font-weight:700; color:#1f2937;">Start Sit-in</h3>
                 </div>
-                <span class="close-modal" onclick="closeSitInForm()" style="font-size:28px; cursor:pointer; color:#9ca3af; padding:10px; border-radius:50%; transition:all 0.3s;" onmouseover="this.style.background='#f3f4f6'; this.style.color='#374151'" onmouseout="this.style.background='transparent'; this.style.color='#9ca3af'">&times;</span>
+                <span class="close-modal" onclick="closeSitInForm()" style="font-size:30px; cursor:pointer; color:#9ca3af; padding:10px; border-radius:50%; transition:all 0.3s;" onmouseover="this.style.background='#f3f4f6'; this.style.color='#374151'" onmouseout="this.style.background='transparent'; this.style.color='#9ca3af'">&times;</span>
             </div>
 
             <form method="POST">
@@ -793,7 +809,7 @@ if ($search !== '') {
                 <!-- Buttons -->
                 <div style="display:flex; justify-content:flex-end; gap:15px;">
                     <button type="button" onclick="closeSitInForm()" 
-                            style="padding:16px 32px; border:none; border-radius:12px; background:#f3f4f6; color:#6b7280; font-size:16px; font-weight:600; cursor:pointer; transition:all 0.3s; flex:1; max-width:150px;"
+                            style="padding:16px 32px; border:none; border-radius:12px; background:#f3f4f6; color:#6b7300; font-size:16px; font-weight:600; cursor:pointer; transition:all 0.3s; flex:1; max-width:150px;"
                             onmouseover="this.style.background='#e5e7eb'; this.style.transform='translateY(-2px)'"
                             onmouseout="this.style.background='#f3f4f6'; this.style.transform='translateY(0)'">
                         Cancel
@@ -937,19 +953,19 @@ if ($search !== '') {
             
             <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:15px; margin-bottom:20px;">
                 <div style="background:linear-gradient(135deg, #667eea, #764ba2); color:white; padding:20px; border-radius:12px; text-align:center;">
-                    <div style="font-size:28px; font-weight:700;"><?php echo $summary ? $summary['total_sitins'] : 0; ?></div>
+                    <div style="font-size:30px; font-weight:700;"><?php echo $summary ? $summary['total_sitins'] : 0; ?></div>
                     <div style="font-size:14px; opacity:0.9;">Total Sit-ins</div>
                 </div>
                 <div style="background:linear-gradient(135deg, #10b981, #059669); color:white; padding:20px; border-radius:12px; text-align:center;">
-                    <div style="font-size:28px; font-weight:700;"><?php echo $summary ? ($summary['total_sessions'] ?? 0) : 0; ?></div>
+                    <div style="font-size:30px; font-weight:700;"><?php echo $summary ? ($summary['total_sessions'] ?? 0) : 0; ?></div>
                     <div style="font-size:14px; opacity:0.9;">Sessions Used</div>
                 </div>
                 <div style="background:linear-gradient(135deg, #f59e0b, #d97706); color:white; padding:20px; border-radius:12px; text-align:center;">
-                    <div style="font-size:28px; font-weight:700;"><?php echo $summary ? $summary['unique_students'] : 0; ?></div>
+                    <div style="font-size:30px; font-weight:700;"><?php echo $summary ? $summary['unique_students'] : 0; ?></div>
                     <div style="font-size:14px; opacity:0.9;">Unique Students</div>
                 </div>
                 <div style="background:linear-gradient(135deg, #ef4444, #dc2626); color:white; padding:20px; border-radius:12px; text-align:center;">
-                    <div style="font-size:28px; font-weight:700;"><?php echo $summary ? $summary['labs_used'] : 0; ?></div>
+                    <div style="font-size:30px; font-weight:700;"><?php echo $summary ? $summary['labs_used'] : 0; ?></div>
                     <div style="font-size:14px; opacity:0.9;">Labs Used</div>
                 </div>
             </div>
@@ -1113,12 +1129,12 @@ if ($search !== '') {
                     <?php while ($a = $pastAnnouncements->fetch_assoc()): ?>
                         <div style="padding:15px; border-bottom:1px solid #e5e7eb; background:#f9fafb;">
                             <div style="font-weight:600; color:#1f2937; margin-bottom:5px;"><?php echo htmlspecialchars($a['title']); ?></div>
-                            <div style="color:#6b7280; font-size:14px;"><?php echo htmlspecialchars($a['message']); ?></div>
+                            <div style="color:#6b7300; font-size:14px;"><?php echo htmlspecialchars($a['message']); ?></div>
                             <div style="color:#9ca3af; font-size:12px; margin-top:8px;"><?php echo date('M j, Y g:i A', strtotime($a['created_at'])); ?></div>
                         </div>
                     <?php endwhile; ?>
                 <?php else: ?>
-                    <div style="padding:20px; text-align:center; color:#6b7280;">No announcements yet.</div>
+                    <div style="padding:20px; text-align:center; color:#6b7300;">No announcements yet.</div>
                 <?php endif; ?>
             </div>
         </div>
@@ -1191,15 +1207,15 @@ if ($search !== '') {
             
             <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:15px; margin-bottom:20px;">
                 <div style="background:linear-gradient(135deg, #6366f1, #4f46e5); color:white; padding:20px; border-radius:12px; text-align:center;">
-                    <div style="font-size:28px; font-weight:700;"><?php echo $countResult['total']; ?></div>
+                    <div style="font-size:30px; font-weight:700;"><?php echo $countResult['total']; ?></div>
                     <div style="font-size:14px; opacity:0.9;">Total Feedback</div>
                 </div>
                 <div style="background:linear-gradient(135deg, #f59e0b, #d97706); color:white; padding:20px; border-radius:12px; text-align:center;">
-                    <div style="font-size:28px; font-weight:700;"><?php echo $countResult['avg_rating'] ? number_format($countResult['avg_rating'], 1) : '0'; ?></div>
+                    <div style="font-size:30px; font-weight:700;"><?php echo $countResult['avg_rating'] ? number_format($countResult['avg_rating'], 1) : '0'; ?></div>
                     <div style="font-size:14px; opacity:0.9;">Avg Rating</div>
                 </div>
                 <div style="background:linear-gradient(135deg, #10b981, #059669); color:white; padding:20px; border-radius:12px; text-align:center;">
-                    <div style="font-size:28px; font-weight:700;"><?php echo $countResult['sum_rating'] ?: 0; ?></div>
+                    <div style="font-size:30px; font-weight:700;"><?php echo $countResult['sum_rating'] ?: 0; ?></div>
                     <div style="font-size:14px; opacity:0.9;">Total Stars</div>
                 </div>
             </div>
@@ -1504,7 +1520,7 @@ if ($search !== '') {
                                             <?php elseif ($r['status'] === 'approved'): ?><span style="color:#10b981; font-weight:600;">Approved</span>
                                             <?php elseif ($r['status'] === 'completed'): ?><span style="color:#6366f1; font-weight:600;">Completed</span>
                                             <?php elseif ($r['status'] === 'rejected'): ?><span style="color:#ef4444; font-weight:600;">Rejected</span>
-                                            <?php else: ?><span style="color:#6b7280;"><?php echo ucfirst($r['status']); ?></span><?php endif; ?>
+                                            <?php else: ?><span style="color:#6b7300;"><?php echo ucfirst($r['status']); ?></span><?php endif; ?>
                                         </td>
                                     </tr>
                                 <?php endwhile; ?>
@@ -1645,6 +1661,16 @@ if ($search !== '') {
             const form = document.createElement('form');
             form.method = 'POST';
             form.innerHTML = '<input type="hidden" name="action" value="delete_student" /><input type="hidden" name="id_number" value="' + id + '" />';
+            document.body.appendChild(form);
+            form.submit();
+        }
+    }
+
+    function confirmResetSessions(id) {
+        if (confirm('Reset sessions to 30 for this student?')) {
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.innerHTML = '<input type="hidden" name="action" value="reset_student_sessions" /><input type="hidden" name="id_number" value="' + id + '" />';
             document.body.appendChild(form);
             form.submit();
         }

@@ -949,6 +949,20 @@ table th, table td {
     background: #b91c1c;
 }
 
+.reset-btn {
+    background: #f59e0b;
+    color: white;
+    padding: 10px 16px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.reset-btn:hover {
+    background: #d97706;
+}
+
 /* ... rest of existing styles ... */
 
 
