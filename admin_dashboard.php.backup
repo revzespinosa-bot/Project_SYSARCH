@@ -126,12 +126,6 @@ if (isset($_GET['export']) && $_GET['export'] !== '') {
         @$conn->query("ALTER TABLE sitin_reservations ADD COLUMN notified TINYINT(1) DEFAULT 0");
     }
 
-    // Track assigned computer per sit-in to sync seat map status
-    $checkColComputer = $conn->query("SELECT COUNT(*) as cnt FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'sitin_reservations' AND COLUMN_NAME = 'computer_name'");
-    if ($checkColComputer && $checkColComputer->fetch_assoc()['cnt'] == 0) {
-        @$conn->query("ALTER TABLE sitin_reservations ADD COLUMN computer_name VARCHAR(50) NULL AFTER lab");
-    }
-
     // Create default admin row if missing
     $adminUsername = 'admin';
     $defaultName = 'Administrator';
@@ -237,48 +231,10 @@ if (isset($_GET['export']) && $_GET['export'] !== '') {
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         if ($_POST['action'] === 'approve_sitin') {
             $sitid = intval($_POST['sitin_id']);
-            $labStmt = $conn->prepare("SELECT lab FROM sitin_reservations WHERE id = ? AND status = 'pending' LIMIT 1");
-            $labStmt->bind_param("i", $sitid);
-            $labStmt->execute();
-            $sitData = $labStmt->get_result()->fetch_assoc();
-            $labStmt->close();
-
-            if (!$sitData || empty($sitData['lab'])) {
-                header("Location: admin_dashboard.php?rejected=1");
-                exit();
-            }
-
-            $lab = trim((string)$sitData['lab']);
-            $pcStmt = $conn->prepare("SELECT id, computer_name FROM computers WHERE lab_name = ? AND status = 'available' ORDER BY computer_name ASC LIMIT 1");
-            $pcStmt->bind_param("s", $lab);
-            $pcStmt->execute();
-            $pcData = $pcStmt->get_result()->fetch_assoc();
-            $pcStmt->close();
-
-            if (!$pcData) {
-                header("Location: admin_dashboard.php?lab_full=1");
-                exit();
-            }
-
-            $computerId = (int)$pcData['id'];
-            $computerName = trim((string)$pcData['computer_name']);
-
-            $lockPcStmt = $conn->prepare("UPDATE computers SET status = 'in_use' WHERE id = ? AND status = 'available'");
-            $lockPcStmt->bind_param("i", $computerId);
-            $lockPcStmt->execute();
-            $pcLocked = $lockPcStmt->affected_rows > 0;
-            $lockPcStmt->close();
-
-            if (!$pcLocked) {
-                header("Location: admin_dashboard.php?lab_full=1");
-                exit();
-            }
-
-            $stmt = $conn->prepare("UPDATE sitin_reservations SET status = 'approved', notified = 0, computer_name = ? WHERE id = ?");
-            $stmt->bind_param("si", $computerName, $sitid);
+            $stmt = $conn->prepare("UPDATE sitin_reservations SET status = 'approved', notified = 0 WHERE id = ?");
+            $stmt->bind_param("i", $sitid);
             $stmt->execute();
             $stmt->close();
-
             header("Location: admin_dashboard.php?approved=1");
             exit();
         } elseif ($_POST['action'] === 'reject_sitin') {
@@ -297,33 +253,8 @@ if (isset($_GET['export']) && $_GET['export'] !== '') {
             $remaining_sessions = intval($_POST['remaining_sessions']);
             
             if ($id_number && $student_name && $purpose && $lab && $remaining_sessions > 0) {
-                $pcStmt = $conn->prepare("SELECT id, computer_name FROM computers WHERE lab_name = ? AND status = 'available' ORDER BY computer_name ASC LIMIT 1");
-                $pcStmt->bind_param("s", $lab);
-                $pcStmt->execute();
-                $pcData = $pcStmt->get_result()->fetch_assoc();
-                $pcStmt->close();
-
-                if (!$pcData) {
-                    header("Location: admin_dashboard.php?lab_full=1");
-                    exit();
-                }
-
-                $computerId = (int)$pcData['id'];
-                $computerName = trim((string)$pcData['computer_name']);
-
-                $lockPcStmt = $conn->prepare("UPDATE computers SET status = 'in_use' WHERE id = ? AND status = 'available'");
-                $lockPcStmt->bind_param("i", $computerId);
-                $lockPcStmt->execute();
-                $pcLocked = $lockPcStmt->affected_rows > 0;
-                $lockPcStmt->close();
-
-                if (!$pcLocked) {
-                    header("Location: admin_dashboard.php?lab_full=1");
-                    exit();
-                }
-
-                $insertStmt = $conn->prepare("INSERT INTO sitin_reservations (id_number, student_name, purpose, lab, computer_name, remaining_sessions, status, time_in, `date`) VALUES (?, ?, ?, ?, ?, ?, 'approved', NOW(), CURDATE())");
-                $insertStmt->bind_param('sssssi', $id_number, $student_name, $purpose, $lab, $computerName, $remaining_sessions);
+                $insertStmt = $conn->prepare("INSERT INTO sitin_reservations (id_number, student_name, purpose, lab, remaining_sessions, status, time_in, `date`) VALUES (?, ?, ?, ?, ?, 'approved', NOW(), CURDATE())");
+                $insertStmt->bind_param('ssssi', $id_number, $student_name, $purpose, $lab, $remaining_sessions);
                 $insertStmt->execute();
                 $insertStmt->close();
                 header("Location: admin_dashboard.php?sitin_started=1");
@@ -337,7 +268,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['logout_student_id']))
     $sit_id = intval($_POST['logout_student_id']);
     
     // Get sit-in details first
-    $sitStmt = $conn->prepare("SELECT id_number, student_name, purpose, lab, computer_name, remaining_sessions FROM sitin_reservations WHERE id = ? AND status = 'approved'");
+    $sitStmt = $conn->prepare("SELECT id_number, student_name, purpose, lab, remaining_sessions FROM sitin_reservations WHERE id = ? AND status = 'approved'");
     $sitStmt->bind_param("i", $sit_id);
     $sitStmt->execute();
     $sitDetails = $sitStmt->get_result()->fetch_assoc();
@@ -364,14 +295,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['logout_student_id']))
         $completeStmt->bind_param("i", $sit_id);
         $completeStmt->execute();
         $completeStmt->close();
-
-        // 4. Release assigned PC back to available so map updates to vacant
-        if (!empty($sitDetails['computer_name'])) {
-            $releaseStmt = $conn->prepare("UPDATE computers SET status = 'available' WHERE lab_name = ? AND computer_name = ? AND status = 'in_use'");
-            $releaseStmt->bind_param("ss", $sitDetails['lab'], $sitDetails['computer_name']);
-            $releaseStmt->execute();
-            $releaseStmt->close();
-        }
     }
     
     header("Location: admin_dashboard.php?session_ended=1");
@@ -467,19 +390,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['logout_student_id']))
         }
     }
 
-     // Student search listing
+    // Student search listing
     $search = isset($_GET['search']) ? trim($_GET['search']) : '';
     if ($search !== '') {
-        // Update search query to include sessions and photo
-    $stmt = $conn->prepare("SELECT id_number, last_name, first_name, middle_name, course, year_level, email, address, photo, COALESCE(remaining_sessions, 30) as remaining_sessions FROM students WHERE id_number LIKE ? OR last_name LIKE ? OR first_name LIKE ?");
+        // Update search query to include sessions
+    $stmt = $conn->prepare("SELECT id_number, last_name, first_name, middle_name, course, year_level, email, COALESCE(remaining_sessions, 30) as remaining_sessions FROM students WHERE id_number LIKE ? OR last_name LIKE ? OR first_name LIKE ?");
         $like = "%{$search}%";
         $stmt->bind_param('sss', $like, $like, $like);
         $stmt->execute();
         $result = $stmt->get_result();
     } else {
-        $result = $conn->query("SELECT id_number, last_name, first_name, middle_name, course, year_level, email, address, photo FROM students ORDER BY last_name, first_name");
+        $result = $conn->query("SELECT id_number, last_name, first_name, middle_name, course, year_level, email, address FROM students ORDER BY last_name, first_name");
     }
-
 
     $total_students = $result ? $result->num_rows : 0;
 
@@ -504,15 +426,9 @@ ORDER BY sitin_count DESC
 LIMIT 10";
 $leaderboardResult = $conn->query($leaderboardQuery);
 
- $totalSitinsAllTime = $conn->query("SELECT COUNT(*) as total FROM sitin_history")->fetch_assoc()['total'];
+$totalSitinsAllTime = $conn->query("SELECT COUNT(*) as total FROM sitin_history")->fetch_assoc()['total'];
 $totalSessionsUsed = $conn->query("SELECT COALESCE(SUM(sessions_used), 0) as total FROM sitin_history")->fetch_assoc()['total'];
 $totalStudentsSitin = $conn->query("SELECT COUNT(DISTINCT id_number) as total FROM sitin_history")->fetch_assoc()['total'];
-
-// Reservation counts for dashboard
-$pendingCount = $conn->query("SELECT COUNT(*) as cnt FROM sitin_reservations WHERE status = 'pending'")->fetch_assoc()['cnt'];
-$approvedCount = $conn->query("SELECT COUNT(*) as cnt FROM sitin_reservations WHERE status = 'approved'")->fetch_assoc()['cnt'];
-$completedCount = $conn->query("SELECT COUNT(*) as cnt FROM sitin_reservations WHERE status = 'completed'")->fetch_assoc()['cnt'];
-$rejectedCount = $conn->query("SELECT COUNT(*) as cnt FROM sitin_reservations WHERE status = 'rejected'")->fetch_assoc()['cnt'];
 
 
     ?>
@@ -523,43 +439,15 @@ $rejectedCount = $conn->query("SELECT COUNT(*) as cnt FROM sitin_reservations WH
         <link rel="stylesheet" href="css/style.css">
     </head>
     <body>
-     <header class="topbar">
-         <div class="topbar-left"><h2>Admin: Sit-in Monitoring</h2></div>
-         <nav class="topbar-nav">
-             <a href="admin_dashboard.php" class="active">Dashboard</a>
-             <a href="logout.php">Logout</a>
-         </nav>
-     </header>
+    <header class="topbar">
+        <div class="topbar-left"><h2>Admin: Sit-in Monitoring</h2></div>
+        <nav class="topbar-nav">
+            <a href="admin_dashboard.php" class="active">Dashboard</a>
+            <a href="logout.php">Logout</a>
+        </nav>
+    </header>
 
-     <!-- Notification Banner for Reservation Approvals -->
-     <?php
-     if (isset($_GET['approved']) && $_GET['approved'] == 1): ?>
-         <div style="background: linear-gradient(135deg, #10b981, #059669); color: white; padding: 12px 24px; text-align: center; font-weight: 600; font-size: 15px; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);">
-             ✅ Reservation approved successfully!
-         </div>
-     <?php endif; ?>
-     <?php if (isset($_GET['rejected']) && $_GET['rejected'] == 1): ?>
-         <div style="background: linear-gradient(135deg, #ef4444, #dc2626); color: white; padding: 12px 24px; text-align: center; font-weight: 600; font-size: 15px; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);">
-             ❌ Reservation rejected.
-         </div>
-     <?php endif; ?>
-     <?php if (isset($_GET['sitin_started']) && $_GET['sitin_started'] == 1): ?>
-         <div style="background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; padding: 12px 24px; text-align: center; font-weight: 600; font-size: 15px; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);">
-             🎯 Sit-in started and logged successfully!
-         </div>
-     <?php endif; ?>
-     <?php if (isset($_GET['session_ended']) && $_GET['session_ended'] == 1): ?>
-         <div style="background: linear-gradient(135deg, #8b5cf6, #7c3aed); color: white; padding: 12px 24px; text-align: center; font-weight: 600; font-size: 15px; box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);">
-             🏁 Session ended and student logged out. Sessions updated.
-         </div>
-     <?php endif; ?>
-     <?php if (isset($_GET['announcement_posted']) && $_GET['announcement_posted'] == 1): ?>
-         <div style="background: linear-gradient(135deg, #f59e0b, #d97706); color: white; padding: 12px 24px; text-align: center; font-weight: 600; font-size: 15px; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);">
-             📢 Announcement posted successfully!
-         </div>
-     <?php endif; ?>
-
-     <div class="admin-layout">
+    <div class="admin-layout">
         <aside class="admin-sidebar">
             <h3>Admin Menu</h3>
             <ul>
@@ -571,54 +459,19 @@ $rejectedCount = $conn->query("SELECT COUNT(*) as cnt FROM sitin_reservations WH
                 <li><button type="button" onclick="openFeature('reportsModal')">Sit-in Reports</button></li>
                 <li><button type="button" onclick="openFeature('announcementModal')">Announcements</button></li>
                 <li><button type="button" onclick="openFeature('feedbackModal')">Feedback Reports</button></li>
-                <li><button type="button" onclick="openFeature('reservationModal')" style="position:relative;">
-                    Reservation
-                    <?php 
-                    $pendingCountAll = $conn->query("SELECT COUNT(*) as cnt FROM sitin_reservations WHERE status = 'pending'")->fetch_assoc()['cnt'];
-                    $labResPending = $conn->query("SELECT COUNT(*) as cnt FROM reservations WHERE status = 'pending'")->fetch_assoc()['cnt'];
-                    $totalPending = $pendingCountAll + $labResPending;
-                    if ($totalPending > 0): ?>
-                        <span style="position:absolute; top:-8px; right:-8px; background:#ef4444; color:white; border-radius:50%; width:22px; height:22px; font-size:12px; font-weight:bold; display:flex; align-items:center; justify-content:center;"><?php echo $totalPending; ?></span>
-                    <?php endif; ?>
-                </button></li>
+                <li><button type="button" onclick="openFeature('reservationModal')">Reservation</button></li>
                 <li><button type="button" onclick="openFeature('profileModal')">Edit Admin Profile</button></li>
                 <li><a href="logout.php">Logout</a></li>
             </ul>
         </aside>
 
         <main class="admin-main">
-             <section class="dashboard-card">
-                 <h3>📊 Overview</h3>
-                 <p><strong>Admin:</strong> <?php echo htmlspecialchars($adminProfile['full_name']); ?></p>
-                 <p><strong>Email:</strong> <?php echo htmlspecialchars($adminProfile['email']); ?></p>
-                  <p><strong>Phone:</strong> <?php echo htmlspecialchars($adminProfile['phone']); ?></p>
-                 <p><strong>Total Registered Students:</strong> <?php echo $total_students; ?></p>
-             </section>
-
-            <!-- Reservation Quick Summary -->
-            <section class="dashboard-card" style="background:linear-gradient(135deg, #1e293b, #334155);">
-                <h3 style="color:#fff;">🎫 Reservation Overview</h3>
-                <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:15px; margin-top:10px;">
-                    <div style="text-align:center; padding:15px; background:rgba(245,158,11,0.2); border-radius:12px; border:1px solid rgba(245,158,11,0.3);">
-                        <div style="font-size:28px; font-weight:700; color:#f59e0b;"><?php echo $pendingCount; ?></div>
-                        <div style="font-size:12px; color:#f59e0b;">Pending</div>
-                    </div>
-                    <div style="text-align:center; padding:15px; background:rgba(16,185,129,0.2); border-radius:12px; border:1px solid rgba(16,185,129,0.3);">
-                        <div style="font-size:28px; font-weight:700; color:#10b981;"><?php echo $approvedCount; ?></div>
-                        <div style="font-size:12px; color:#10b981;">Approved</div>
-                    </div>
-                    <div style="text-align:center; padding:15px; background:rgba(99,102,241,0.2); border-radius:12px; border:1px solid rgba(99,102,241,0.3);">
-                        <div style="font-size:28px; font-weight:700; color:#6366f1;"><?php echo $completedCount; ?></div>
-                        <div style="font-size:12px; color:#6366f1;">Completed</div>
-                    </div>
-                    <div style="text-align:center; padding:15px; background:rgba(239,68,68,0.2); border-radius:12px; border:1px solid rgba(239,68,68,0.3);">
-                        <div style="font-size:28px; font-weight:700; color:#ef4444;"><?php echo $rejectedCount; ?></div>
-                        <div style="font-size:12px; color:#ef4444;">Rejected</div>
-                    </div>
-                </div>
-                <p style="margin-top:15px; font-size:14px; color:#94a3b8;">
-                    <a href="#" onclick="document.getElementById('reservationModal').style.display='block'; document.body.style.overflow='hidden'; return false;" style="color:#60a5fa;">View full reservation management →</a>
-                </p>
+            <section class="dashboard-card">
+                <h3>📊 Overview</h3>
+                <p><strong>Admin:</strong> <?php echo htmlspecialchars($adminProfile['full_name']); ?></p>
+                <p><strong>Email:</strong> <?php echo htmlspecialchars($adminProfile['email']); ?></p>
+                <p><strong>Phone:</strong> <?php echo htmlspecialchars($adminProfile['phone']); ?></p>
+                <p><strong>Total Registered Students:</strong> <?php echo $total_students; ?></p>
             </section>
 
             <section class="leaderboard-section">
@@ -709,55 +562,56 @@ $rejectedCount = $conn->query("SELECT COUNT(*) as cnt FROM sitin_reservations WH
                 <th>Action</th>
                     </tr>
                     </thead>
-                     <tbody>
-     <?php 
-     // RELOAD STUDENT RESULTS FOR SEARCH MODAL
-     // ✅ FIXED SEARCH QUERY - INCLUDES remaining_sessions AND photo
+                    <tbody>
+    <?php 
+    // RELOAD STUDENT RESULTS FOR SEARCH MODAL
+    // ✅ FIXED SEARCH QUERY - INCLUDES remaining_sessions
 if ($search !== '') {
-    $stmt = $conn->prepare("SELECT id_number, last_name, first_name, middle_name, course, year_level, email, address, photo, COALESCE(remaining_sessions, 30) as remaining_sessions FROM students WHERE id_number LIKE ? OR last_name LIKE ? OR first_name LIKE ?");
+    $stmt = $conn->prepare("SELECT id_number, last_name, first_name, middle_name, course, year_level, email, address, COALESCE(remaining_sessions, 30) as remaining_sessions FROM students WHERE id_number LIKE ? OR last_name LIKE ? OR first_name LIKE ?");
     $like = "%{$search}%";
     $stmt->bind_param('sss', $like, $like, $like);
     $stmt->execute();
     $searchResult = $stmt->get_result();
 } else {
-    $searchResult = $conn->query("SELECT id_number, last_name, first_name, middle_name, course, year_level, email, address, photo, COALESCE(remaining_sessions, 30) as remaining_sessions FROM students ORDER BY last_name, first_name LIMIT 50");
+    $searchResult = $conn->query("SELECT id_number, last_name, first_name, middle_name, course, year_level, email, address, COALESCE(remaining_sessions, 30) as remaining_sessions FROM students ORDER BY last_name, first_name LIMIT 50");
 }
-     if ($searchResult && $searchResult->num_rows > 0): ?>
-         <?php while ($student = $searchResult->fetch_assoc()): ?>
-             <tr>
-                 <td><?php echo htmlspecialchars($student['id_number']); ?></td>
-                 <td><?php echo htmlspecialchars($student['last_name'] . ', ' . $student['first_name']); ?></td>
-                 <td><?php echo htmlspecialchars($student['course']); ?></td>
-                 <td><?php echo htmlspecialchars($student['year_level']); ?></td>
-                 <td><?php echo htmlspecialchars($student['email']); ?></td>
+
+    if ($searchResult && $searchResult->num_rows > 0): ?>
+        <?php while ($student = $searchResult->fetch_assoc()): ?>
+            <tr>
+                <td><?php echo htmlspecialchars($student['id_number']); ?></td>
+                <td><?php echo htmlspecialchars($student['last_name'] . ', ' . $student['first_name']); ?></td>
+                <td><?php echo htmlspecialchars($student['course']); ?></td>
+                <td><?php echo htmlspecialchars($student['year_level']); ?></td>
+                <td><?php echo htmlspecialchars($student['email']); ?></td>
 <td style="font-weight:600; color:#10b981;">
-     <?php echo $student['remaining_sessions'] ?? 30; ?>
+    <?php echo $student['remaining_sessions'] ?? 30; ?>
 </td>
 <td style="display:flex; gap:5px;">
-     <button class="sitin-btn" type="button" 
-         onclick="document.getElementById('sitInFormModal').style.display='block'; 
-                  document.getElementById('sitin_id').value='<?php echo addslashes($student['id_number']); ?>'; 
-                  document.getElementById('sitin_name').value='<?php echo addslashes($student['first_name'].' '.$student['last_name']); ?>'; 
-                  document.body.style.overflow='hidden';">
-         🚀 Sit-in
-     </button>
-     <button type="button" class="edit-btn" 
-         onclick="openEditStudentModal('<?php echo addslashes($student['id_number']); ?>', '<?php echo addslashes($student['last_name']); ?>', '<?php echo addslashes($student['first_name']); ?>', '<?php echo addslashes($student['middle_name'] ?? ''); ?>', '<?php echo addslashes($student['course']); ?>', '<?php echo addslashes($student['year_level']); ?>', '<?php echo addslashes($student['email']); ?>', '<?php echo addslashes($student['address'] ?? ''); ?>', '<?php echo addslashes($student['photo'] ?? ''); ?>')">
-         ✏️ Edit
-     </button>
-     <button type="button" class="reset-btn" onclick="confirmResetSessions('<?php echo addslashes($student['id_number']); ?>')">
-         🔄 Reset
-     </button>
-     <button type="button" class="delete-btn" onclick="confirmDeleteStudent('<?php echo addslashes($student['id_number']); ?>')">
-         🗑️ Delete
-     </button>
+    <button class="sitin-btn" type="button" 
+        onclick="document.getElementById('sitInFormModal').style.display='block'; 
+                 document.getElementById('sitin_id').value='<?php echo addslashes($student['id_number']); ?>'; 
+                 document.getElementById('sitin_name').value='<?php echo addslashes($student['first_name'].' '.$student['last_name']); ?>'; 
+                 document.body.style.overflow='hidden';">
+        🚀 Sit-in
+    </button>
+    <button type="button" class="edit-btn" 
+        onclick="openEditStudentModal('<?php echo addslashes($student['id_number']); ?>', '<?php echo addslashes($student['last_name']); ?>', '<?php echo addslashes($student['first_name']); ?>', '<?php echo addslashes($student['middle_name'] ?? ''); ?>', '<?php echo addslashes($student['course']); ?>', '<?php echo addslashes($student['year_level']); ?>', '<?php echo addslashes($student['email']); ?>', '<?php echo addslashes($student['address'] ?? ''); ?>')">
+        ✏️ Edit
+    </button>
+    <button type="button" class="reset-btn" onclick="confirmResetSessions('<?php echo addslashes($student['id_number']); ?>')">
+        🔄 Reset
+    </button>
+    <button type="button" class="delete-btn" onclick="confirmDeleteStudent('<?php echo addslashes($student['id_number']); ?>')">
+        🗑️ Delete
+    </button>
 </td>
-             </tr>
-         <?php endwhile; ?>
-     <?php else: ?>
-         <tr><td colspan="7" style="text-align:center; color:#666;">No students found. Try different search term.</td></tr>
-     <?php endif; ?>
-                     </tbody>
+            </tr>
+        <?php endwhile; ?>
+    <?php else: ?>
+        <tr><td colspan="7" style="text-align:center; color:#666;">No students found. Try different search term.</td></tr>
+    <?php endif; ?>
+                    </tbody>
                 </table>
             </div>
         </div>
@@ -1411,82 +1265,13 @@ if ($search !== '') {
         <div class="admin-modal-content" style="max-width:1100px; width:95%;">
             <span class="close-modal" onclick="closeFeature('reservationModal')">&times;</span>
             <h3>🖥️ Reservation Management</h3>
-             
+            
             <div style="display:flex; gap:10px; margin-bottom:20px; border-bottom:2px solid #e5e7eb; padding-bottom:10px;">
-                <button type="button" onclick="showResTab('seatMap')" id="resTabSeatMap" style="padding:10px 20px; border:none; border-radius:8px; background:#6366f1; color:white; cursor:pointer; font-weight:600;">Seat Map</button>
-                <button type="button" onclick="showResTab('computerControl')" id="resTabComputer" style="padding:10px 20px; border:none; border-radius:8px; background:#e5e7eb; color:#374151; cursor:pointer; font-weight:600;">Computer Control</button>
+                <button type="button" onclick="showResTab('computerControl')" id="resTabComputer" style="padding:10px 20px; border:none; border-radius:8px; background:#6366f1; color:white; cursor:pointer; font-weight:600;">Computer Control</button>
                 <button type="button" onclick="showResTab('reservationRequest')" id="resTabRequest" style="padding:10px 20px; border:none; border-radius:8px; background:#e5e7eb; color:#374151; cursor:pointer; font-weight:600;">Reservation Requests</button>
                 <button type="button" onclick="showResTab('reservationLogs')" id="resTabLogs" style="padding:10px 20px; border:none; border-radius:8px; background:#e5e7eb; color:#374151; cursor:pointer; font-weight:600;">Logs</button>
             </div>
-             
-            <!-- SEAT MAP -->
-            <div id="resSeatMap" style="display:none;">
-                <?php
-                $seatMapLabs = ['524', '526', '528', '530', '542', '544'];
-                $seatMapCapacity = 50;
-                $reservationSeatMap = [];
-                foreach ($seatMapLabs as $lab) {
-                    $reservationSeatMap[$lab] = [];
-                    $labStmt = $conn->prepare("SELECT computer_name, status FROM computers WHERE lab_name = ? ORDER BY computer_name");
-                    if ($labStmt) {
-                        $labStmt->bind_param('s', $lab);
-                        $labStmt->execute();
-                        $labResult = $labStmt->get_result();
-                        while ($comp = $labResult->fetch_assoc()) {
-                            $reservationSeatMap[$lab][] = [
-                                'label' => $comp['computer_name'],
-                                'status' => $comp['status']
-                            ];
-                        }
-                        $labStmt->close();
-                    }
-                }
-                ?>
-                <div style="background:linear-gradient(135deg,#f8fafc,#eef2ff); border:1px solid #e2e8f0; border-radius:16px; padding:18px; margin-bottom:16px;">
-                    <div style="display:flex; gap:12px; align-items:center; justify-content:space-between; flex-wrap:wrap;">
-                        <div>
-                            <h4 style="margin:0 0 6px 0; color:#1e293b;">🪑 Lab Seat Map</h4>
-                            <p style="margin:0; color:#64748b; font-size:13px;">Clean view of vacant and occupied seats per laboratory.</p>
-                        </div>
-                        <div style="display:flex; align-items:center; gap:8px;">
-                            <label for="resSeatMapLabSelect" style="font-weight:600; color:#334155;">Select Lab</label>
-                            <select id="resSeatMapLabSelect" style="padding:10px 12px; border:1px solid #cbd5e1; border-radius:10px; background:#fff; min-width:150px;">
-                                <?php foreach ($seatMapLabs as $lab): ?>
-                                    <option value="<?php echo htmlspecialchars($lab); ?>">Lab <?php echo htmlspecialchars($lab); ?></option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-
-                <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:12px; margin-bottom:16px;">
-                    <div style="background:#ecfdf5; border:1px solid #a7f3d0; border-radius:12px; padding:12px;">
-                        <div style="font-size:12px; color:#065f46; margin-bottom:4px; text-transform:uppercase; letter-spacing:0.4px;">Vacant</div>
-                        <div id="resSeatMapVacant" style="font-size:24px; font-weight:700; color:#047857;">0</div>
-                    </div>
-                    <div style="background:#fef2f2; border:1px solid #fecaca; border-radius:12px; padding:12px;">
-                        <div style="font-size:12px; color:#991b1b; margin-bottom:4px; text-transform:uppercase; letter-spacing:0.4px;">Occupied</div>
-                        <div id="resSeatMapOccupied" style="font-size:24px; font-weight:700; color:#dc2626;">0</div>
-                    </div>
-                    <div style="background:#fffbeb; border:1px solid #fde68a; border-radius:12px; padding:12px;">
-                        <div style="font-size:12px; color:#92400e; margin-bottom:4px; text-transform:uppercase; letter-spacing:0.4px;">Maintenance</div>
-                        <div id="resSeatMapMaintenance" style="font-size:24px; font-weight:700; color:#d97706;">0</div>
-                    </div>
-                    <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:12px; padding:12px;">
-                        <div style="font-size:12px; color:#1e3a8a; margin-bottom:4px; text-transform:uppercase; letter-spacing:0.4px;">Total Seats</div>
-                        <div style="font-size:24px; font-weight:700; color:#1d4ed8;"><?php echo (int)$seatMapCapacity; ?></div>
-                    </div>
-                </div>
-
-                <div style="display:flex; gap:14px; margin-bottom:10px; color:#475569; font-size:13px; flex-wrap:wrap;">
-                    <span style="display:flex; align-items:center; gap:6px;"><span style="width:12px; height:12px; background:#22c55e; border-radius:3px; display:inline-block;"></span>Vacant</span>
-                    <span style="display:flex; align-items:center; gap:6px;"><span style="width:12px; height:12px; background:#ef4444; border-radius:3px; display:inline-block;"></span>Occupied</span>
-                    <span style="display:flex; align-items:center; gap:6px;"><span style="width:12px; height:12px; background:#f59e0b; border-radius:3px; display:inline-block;"></span>Maintenance</span>
-                </div>
-
-                <div id="resSeatMapGrid" style="display:grid; grid-template-columns:repeat(10, minmax(0, 1fr)); gap:10px; background:#fff; border:1px solid #e2e8f0; border-radius:14px; padding:14px; max-height:420px; overflow:auto;"></div>
-            </div>
-
+            
             <!-- COMPUTER CONTROL -->
             <div id="resComputerControl" style="display:block;">
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px;">
@@ -1533,6 +1318,48 @@ if ($search !== '') {
                             </table>
                         </div>
                     </div>
+                </div>
+                <h4 style="margin:20px 0 15px;">🖥️ All Computers</h4>
+                <?php
+                $allComputers = $conn->query("SELECT * FROM computers ORDER BY lab_name, computer_name");
+                ?>
+                <div style="max-height:200px; overflow:auto;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Lab</th>
+                                <th>Computer</th>
+                                <th>Status</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php if ($allComputers && $allComputers->num_rows > 0): ?>
+                                <?php while ($c = $allComputers->fetch_assoc()): ?>
+                                    <tr>
+                                        <td><?php echo $c['id']; ?></td>
+                                        <td><?php echo htmlspecialchars($c['lab_name']); ?></td>
+                                        <td><?php echo htmlspecialchars($c['computer_name']); ?></td>
+                                        <td>
+                                            <?php if ($c['status'] === 'available'): ?><span style="color:#10b981;">Available</span>
+                                            <?php elseif ($c['status'] === 'in_use'): ?><span style="color:#ef4444;">In Use</span>
+                                            <?php else: ?><span style="color:#f59e0b;">Maintenance</span><?php endif; ?>
+                                        </td>
+                                        <td>
+                                            <form method="POST" style="display:inline;">
+                                                <input type="hidden" name="action" value="delete_computer">
+                                                <input type="hidden" name="computer_id" value="<?php echo $c['id']; ?>">
+                                                <button type="submit" onclick="return confirm('Delete this computer?')" style="background:#ef4444; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">Delete</button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                <?php endwhile; ?>
+                            <?php else: ?>
+                                <tr><td colspan="5" style="text-align:center; color:#666;">No computers found.</td></tr>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
                 </div>
             </div>
             
@@ -1632,76 +1459,77 @@ if ($search !== '') {
                 </div>
             </div>
             
-              <!-- RESERVATION LOGS -->
-              <div id="resReservationLogs" style="display:none;">
-                  <?php
-                  $reservationLogs = $conn->query("SELECT * FROM sitin_reservations ORDER BY created_at DESC LIMIT 100");
-                  
-                  // Get recent audit logs from all status changes
-                  $recentActivity = $conn->query("SELECT * FROM sitin_reservations ORDER BY created_at DESC, id DESC LIMIT 50");
-                 ?>
-                 <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr)); gap:15px; margin-bottom:20px;">
-                     <div style="background:#f59e0b; color:white; padding:15px; border-radius:10px; text-align:center;">
-                         <div style="font-size:24px; font-weight:700;"><?php echo $pendingCount; ?></div>
-                         <div style="font-size:12px;">Pending</div>
-                     </div>
-                     <div style="background:#10b981; color:white; padding:15px; border-radius:10px; text-align:center;">
-                         <div style="font-size:24px; font-weight:700;"><?php echo $approvedCount; ?></div>
-                         <div style="font-size:12px;">Approved</div>
-                     </div>
-                     <div style="background:#6366f1; color:white; padding:15px; border-radius:10px; text-align:center;">
-                         <div style="font-size:24px; font-weight:700;"><?php echo $completedCount; ?></div>
-                         <div style="font-size:12px;">Completed</div>
-                     </div>
-                     <div style="background:#ef4444; color:white; padding:15px; border-radius:10px; text-align:center;">
-                         <div style="font-size:24px; font-weight:700;"><?php echo $rejectedCount; ?></div>
-                         <div style="font-size:12px;">Rejected</div>
-                     </div>
-                 </div>
-                 
-                 <!-- Recent Activity/Logs -->
-                 <h4 style="margin-bottom:15px;">📊 Overall Reservation Summary</h4>
-                 <div style="max-height:350px; overflow:auto; margin-bottom:25px;">
-                     <table>
-                         <thead>
-                             <tr>
-                                 <th>ID</th>
-                                 <th>ID Number</th>
-                                 <th>Name</th>
-                                 <th>Lab</th>
-                                 <th>Purpose</th>
-                                 <th>Date</th>
-                                 <th>Time In</th>
-                                 <th>Status</th>
-                                 <th>Notified</th>
-                             </tr>
-                         </thead>
-                         <tbody>
-                             <?php if ($reservationLogs && $reservationLogs->num_rows > 0): ?>
-                                 <?php while ($r = $reservationLogs->fetch_assoc()): ?>
-                                     <tr>
-                                         <td><?php echo $r['id']; ?></td>
-                                         <td><?php echo htmlspecialchars($r['id_number']); ?></td>
-                                         <td><?php echo htmlspecialchars($r['student_name']); ?></td>
-                                         <td><?php echo htmlspecialchars($r['lab']); ?></td>
-                                         <td><?php echo htmlspecialchars($r['purpose']); ?></td>
-                                         <td><?php echo $r['date'] ? date('M j, Y', strtotime($r['date'])) : '-'; ?></td>
-                                         <td><?php echo $r['time_in'] ? date('g:i A', strtotime($r['time_in'])) : '-'; ?></td>
-                                         <td>
-                                             <?php if ($r['status'] === 'pending'): ?><span style="color:#f59e0b; font-weight:600;">Pending</span>
-                                             <?php elseif ($r['status'] === 'approved'): ?><span style="color:#10b981; font-weight:600;">Approved</span>
-                                             <?php elseif ($r['status'] === 'completed'): ?><span style="color:#6366f1; font-weight:600;">Completed</span>
-                                             <?php elseif ($r['status'] === 'rejected'): ?><span style="color:#ef4444; font-weight:600;">Rejected</span>
-                                             <?php elseif ($r['status'] === 'cancelled'): ?><span style="color:#6b7300; font-weight:600;">Cancelled</span>
-                                             <?php else: ?><span style="color:#6b7300;"><?php echo ucfirst($r['status']); ?></span><?php endif; ?>
-                                         </td>
-                                         <td><?php echo $r['notified'] ? 'Yes' : 'No'; ?></td>
-                                     </tr>
-                                  <?php endwhile; ?>
-                             <?php endif; ?>
-                         </tbody>
-                     </table>
-                 </div>
+            <!-- RESERVATION LOGS -->
+            <div id="resReservationLogs" style="display:none;">
+                <?php
+                $reservationLogs = $conn->query("SELECT * FROM sitin_reservations ORDER BY created_at DESC LIMIT 100");
+                $pendingCount = $conn->query("SELECT COUNT(*) as cnt FROM sitin_reservations WHERE status = 'pending'")->fetch_assoc()['cnt'];
+                $approvedCount = $conn->query("SELECT COUNT(*) as cnt FROM sitin_reservations WHERE status = 'approved'")->fetch_assoc()['cnt'];
+                $completedCount = $conn->query("SELECT COUNT(*) as cnt FROM sitin_reservations WHERE status = 'completed'")->fetch_assoc()['cnt'];
+                $rejectedCount = $conn->query("SELECT COUNT(*) as cnt FROM sitin_reservations WHERE status = 'rejected'")->fetch_assoc()['cnt'];
+                ?>
+                <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr)); gap:15px; margin-bottom:20px;">
+                    <div style="background:#f59e0b; color:white; padding:15px; border-radius:10px; text-align:center;">
+                        <div style="font-size:24px; font-weight:700;"><?php echo $pendingCount; ?></div>
+                        <div style="font-size:12px;">Pending</div>
+                    </div>
+                    <div style="background:#10b981; color:white; padding:15px; border-radius:10px; text-align:center;">
+                        <div style="font-size:24px; font-weight:700;"><?php echo $approvedCount; ?></div>
+                        <div style="font-size:12px;">Approved</div>
+                    </div>
+                    <div style="background:#6366f1; color:white; padding:15px; border-radius:10px; text-align:center;">
+                        <div style="font-size:24px; font-weight:700;"><?php echo $completedCount; ?></div>
+                        <div style="font-size:12px;">Completed</div>
+                    </div>
+                    <div style="background:#ef4444; color:white; padding:15px; border-radius:10px; text-align:center;">
+                        <div style="font-size:24px; font-weight:700;"><?php echo $rejectedCount; ?></div>
+                        <div style="font-size:12px;">Rejected</div>
+                    </div>
+                </div>
+                
+                <h4 style="margin-bottom:15px;">📜 Reservation History</h4>
+                <div style="max-height:350px; overflow:auto;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>ID Number</th>
+                                <th>Name</th>
+                                <th>Lab</th>
+                                <th>Purpose</th>
+                                <th>Date</th>
+                                <th>Time In</th>
+                                <th>Time Out</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php if ($reservationLogs && $reservationLogs->num_rows > 0): ?>
+                                <?php while ($r = $reservationLogs->fetch_assoc()): ?>
+                                    <tr>
+                                        <td><?php echo $r['id']; ?></td>
+                                        <td><?php echo htmlspecialchars($r['id_number']); ?></td>
+                                        <td><?php echo htmlspecialchars($r['student_name']); ?></td>
+                                        <td><?php echo htmlspecialchars($r['lab']); ?></td>
+                                        <td><?php echo htmlspecialchars($r['purpose']); ?></td>
+                                        <td><?php echo $r['date'] ? date('M j, Y', strtotime($r['date'])) : '-'; ?></td>
+                                        <td><?php echo $r['time_in'] ? date('g:i A', strtotime($r['time_in'])) : '-'; ?></td>
+                                        <td><?php echo $r['time_out'] ? date('g:i A', strtotime($r['time_out'])) : '-'; ?></td>
+                                        <td>
+                                            <?php if ($r['status'] === 'pending'): ?><span style="color:#f59e0b; font-weight:600;">Pending</span>
+                                            <?php elseif ($r['status'] === 'approved'): ?><span style="color:#10b981; font-weight:600;">Approved</span>
+                                            <?php elseif ($r['status'] === 'completed'): ?><span style="color:#6366f1; font-weight:600;">Completed</span>
+                                            <?php elseif ($r['status'] === 'rejected'): ?><span style="color:#ef4444; font-weight:600;">Rejected</span>
+                                            <?php else: ?><span style="color:#6b7300;"><?php echo ucfirst($r['status']); ?></span><?php endif; ?>
+                                        </td>
+                                    </tr>
+                                <?php endwhile; ?>
+                            <?php else: ?>
+                                <tr><td colspan="9" style="text-align:center; color:#666;">No reservation logs found.</td></tr>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
@@ -1787,14 +1615,11 @@ if ($search !== '') {
         }
     }
 
-     function showResTab(tabName) {
-        document.getElementById('resSeatMap').style.display = 'none';
+    function showResTab(tabName) {
         document.getElementById('resComputerControl').style.display = 'none';
         document.getElementById('resReservationRequest').style.display = 'none';
         document.getElementById('resReservationLogs').style.display = 'none';
         
-        document.getElementById('resTabSeatMap').style.background = '#e5e7eb';
-        document.getElementById('resTabSeatMap').style.color = '#374151';
         document.getElementById('resTabComputer').style.background = '#e5e7eb';
         document.getElementById('resTabComputer').style.color = '#374151';
         document.getElementById('resTabRequest').style.background = '#e5e7eb';
@@ -1802,15 +1627,7 @@ if ($search !== '') {
         document.getElementById('resTabLogs').style.background = '#e5e7eb';
         document.getElementById('resTabLogs').style.color = '#374151';
         
-        if (tabName === 'seatMap') {
-            document.getElementById('resSeatMap').style.display = 'block';
-            document.getElementById('resTabSeatMap').style.background = '#6366f1';
-            document.getElementById('resTabSeatMap').style.color = 'white';
-            const mapLabSelect = document.getElementById('resSeatMapLabSelect');
-            if (mapLabSelect) {
-                renderReservationSeatMap(mapLabSelect.value);
-            }
-        } else if (tabName === 'computerControl') {
+        if (tabName === 'computerControl') {
             document.getElementById('resComputerControl').style.display = 'block';
             document.getElementById('resTabComputer').style.background = '#6366f1';
             document.getElementById('resTabComputer').style.color = 'white';
@@ -1874,99 +1691,15 @@ if ($search !== '') {
         window.open(exportUrl, '_blank');
     }
 
-    const reservationSeatMapData = <?php echo json_encode($reservationSeatMap, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>;
-    const reservationSeatMapCapacity = <?php echo (int)$seatMapCapacity; ?>;
-
-    function renderReservationSeatMap(labCode) {
-        const grid = document.getElementById('resSeatMapGrid');
-        const occupiedEl = document.getElementById('resSeatMapOccupied');
-        const vacantEl = document.getElementById('resSeatMapVacant');
-        const maintenanceEl = document.getElementById('resSeatMapMaintenance');
-        if (!grid || !occupiedEl || !vacantEl || !maintenanceEl) return;
-
-        const labSeats = Array.isArray(reservationSeatMapData[labCode]) ? reservationSeatMapData[labCode] : [];
-        let occupied = 0;
-        let maintenance = 0;
-
-        grid.innerHTML = '';
-        for (let i = 0; i < reservationSeatMapCapacity; i++) {
-            const seatNo = i + 1;
-            const seatData = labSeats[i] || null;
-            const status = seatData ? seatData.status : 'available';
-            const label = seatData ? seatData.label : ('Seat ' + String(seatNo).padStart(2, '0'));
-
-            if (status === 'in_use') occupied++;
-            if (status === 'maintenance') maintenance++;
-
-            const seat = document.createElement('div');
-            seat.style.borderRadius = '10px';
-            seat.style.padding = '10px 8px';
-            seat.style.textAlign = 'center';
-            seat.style.border = '1px solid #d1d5db';
-            seat.style.transition = 'all 0.2s ease';
-            seat.style.cursor = 'default';
-
-            const title = document.createElement('div');
-            title.textContent = label;
-            title.style.fontSize = '11px';
-            title.style.fontWeight = '700';
-            title.style.lineHeight = '1.3';
-
-            const seatIndex = document.createElement('div');
-            seatIndex.textContent = '#' + seatNo;
-            seatIndex.style.fontSize = '10px';
-            seatIndex.style.marginTop = '4px';
-            seatIndex.style.opacity = '0.9';
-
-            if (status === 'in_use') {
-                seat.style.background = '#fee2e2';
-                seat.style.borderColor = '#fca5a5';
-                title.style.color = '#991b1b';
-                seatIndex.style.color = '#991b1b';
-                seat.title = label + ' - Occupied';
-            } else if (status === 'maintenance') {
-                seat.style.background = '#fef3c7';
-                seat.style.borderColor = '#fcd34d';
-                title.style.color = '#92400e';
-                seatIndex.style.color = '#92400e';
-                seat.title = label + ' - Maintenance';
-            } else {
-                seat.style.background = '#dcfce7';
-                seat.style.borderColor = '#86efac';
-                title.style.color = '#166534';
-                seatIndex.style.color = '#166534';
-                seat.title = label + ' - Vacant';
-            }
-
-            seat.appendChild(title);
-            seat.appendChild(seatIndex);
-            grid.appendChild(seat);
-        }
-
-        occupiedEl.textContent = occupied;
-        maintenanceEl.textContent = maintenance;
-        vacantEl.textContent = Math.max(0, reservationSeatMapCapacity - occupied - maintenance);
-    }
-
-     // Auto-open search modal if search exists
-     <?php if (!empty($search)) : ?>
-     document.addEventListener('DOMContentLoaded', function() {
-         openFeature('searchModal');
-     });
-     <?php endif; ?>
-
+    // Auto-open search modal if search exists
+    <?php if (!empty($search)) : ?>
     document.addEventListener('DOMContentLoaded', function() {
-        const mapLabSelect = document.getElementById('resSeatMapLabSelect');
-        if (mapLabSelect) {
-            renderReservationSeatMap(mapLabSelect.value);
-            mapLabSelect.addEventListener('change', function() {
-                renderReservationSeatMap(this.value);
-            });
-        }
+        openFeature('searchModal');
     });
-     </script>
+    <?php endif; ?>
+    </script>
 
-     <script src="js/script.js"></script>
+    <script src="js/script.js"></script> 
 
 
 

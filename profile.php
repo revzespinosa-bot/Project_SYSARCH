@@ -550,12 +550,11 @@ $hasAnyFeedback->close();
             <select name="lab" required>
                 <option value="">Select Lab</option>
                 <option value="524">Lab 524</option>
-                <option value="525">Lab 525</option>
                 <option value="526">Lab 526</option>
-                <option value="527">Lab 527</option>
                 <option value="528">Lab 528</option>
-                <option value="Mac Lab">Mac Lab</option>
-                <option value="Network Lab">Network Lab</option>
+                <option value="530">Lab 530</option>
+                <option value="542">Lab 542</option>
+                <option value="544">lab 544</option>
             </select>
 
             <label>Time In</label>
