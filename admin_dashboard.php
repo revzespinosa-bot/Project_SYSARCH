@@ -237,6 +237,7 @@ if (isset($_GET['export']) && $_GET['export'] !== '') {
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         if ($_POST['action'] === 'approve_sitin') {
             $sitid = intval($_POST['sitin_id']);
+            $selectedComputer = isset($_POST['computer_name']) ? trim($_POST['computer_name']) : '';
             $labStmt = $conn->prepare("SELECT lab FROM sitin_reservations WHERE id = ? AND status = 'pending' LIMIT 1");
             $labStmt->bind_param("i", $sitid);
             $labStmt->execute();
@@ -249,8 +250,13 @@ if (isset($_GET['export']) && $_GET['export'] !== '') {
             }
 
             $lab = trim((string)$sitData['lab']);
-            $pcStmt = $conn->prepare("SELECT id, computer_name FROM computers WHERE lab_name = ? AND status = 'available' ORDER BY computer_name ASC LIMIT 1");
-            $pcStmt->bind_param("s", $lab);
+            if ($selectedComputer === '') {
+                header("Location: admin_dashboard.php?lab_full=1");
+                exit();
+            }
+
+            $pcStmt = $conn->prepare("SELECT id, computer_name FROM computers WHERE lab_name = ? AND computer_name = ? AND status = 'available' LIMIT 1");
+            $pcStmt->bind_param("ss", $lab, $selectedComputer);
             $pcStmt->execute();
             $pcData = $pcStmt->get_result()->fetch_assoc();
             $pcStmt->close();
@@ -294,11 +300,12 @@ if (isset($_GET['export']) && $_GET['export'] !== '') {
             $student_name = trim($_POST['student_name']);
             $purpose = trim($_POST['purpose']);
             $lab = trim($_POST['lab']);
+            $selectedComputer = isset($_POST['computer_name']) ? trim($_POST['computer_name']) : '';
             $remaining_sessions = intval($_POST['remaining_sessions']);
             
-            if ($id_number && $student_name && $purpose && $lab && $remaining_sessions > 0) {
-                $pcStmt = $conn->prepare("SELECT id, computer_name FROM computers WHERE lab_name = ? AND status = 'available' ORDER BY computer_name ASC LIMIT 1");
-                $pcStmt->bind_param("s", $lab);
+            if ($id_number && $student_name && $purpose && $lab && $selectedComputer && $remaining_sessions > 0) {
+                $pcStmt = $conn->prepare("SELECT id, computer_name FROM computers WHERE lab_name = ? AND computer_name = ? AND status = 'available' LIMIT 1");
+                $pcStmt->bind_param("ss", $lab, $selectedComputer);
                 $pcStmt->execute();
                 $pcData = $pcStmt->get_result()->fetch_assoc();
                 $pcStmt->close();
@@ -738,6 +745,8 @@ if ($search !== '') {
          onclick="document.getElementById('sitInFormModal').style.display='block'; 
                   document.getElementById('sitin_id').value='<?php echo addslashes($student['id_number']); ?>'; 
                   document.getElementById('sitin_name').value='<?php echo addslashes($student['first_name'].' '.$student['last_name']); ?>'; 
+                 document.getElementById('sitin_lab').selectedIndex = 0;
+                 document.getElementById('sitin_pc').innerHTML = '<option value=&quot;&quot; selected disabled>Select lab first</option>';
                   document.body.style.overflow='hidden';">
          🚀 Sit-in
      </button>
@@ -912,6 +921,23 @@ if ($search !== '') {
                 <span class="close-modal" onclick="closeSitInForm()" style="font-size:30px; cursor:pointer; color:#9ca3af; padding:10px; border-radius:50%; transition:all 0.3s;" onmouseover="this.style.background='#f3f4f6'; this.style.color='#374151'" onmouseout="this.style.background='transparent'; this.style.color='#9ca3af'">&times;</span>
             </div>
 
+            <?php
+            $availableComputersByLab = [];
+            $sitinLabs = ['524', '526', '528', '530', '542', '544'];
+            foreach ($sitinLabs as $sitinLab) {
+                $availableComputersByLab[$sitinLab] = [];
+                $pcListStmt = $conn->prepare("SELECT computer_name FROM computers WHERE lab_name = ? AND status = 'available' ORDER BY computer_name ASC");
+                if ($pcListStmt) {
+                    $pcListStmt->bind_param('s', $sitinLab);
+                    $pcListStmt->execute();
+                    $pcListResult = $pcListStmt->get_result();
+                    while ($pcRow = $pcListResult->fetch_assoc()) {
+                        $availableComputersByLab[$sitinLab][] = $pcRow['computer_name'];
+                    }
+                    $pcListStmt->close();
+                }
+            }
+            ?>
             <form method="POST">
                 <input type="hidden" name="action" value="start_sitin">
                 <!-- Student Info -->
@@ -938,10 +964,16 @@ if ($search !== '') {
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:30px;">
                     <div>
                         <label style="display:block; margin-bottom:10px; font-weight:600; color:#374151; font-size:15px;">Lab <span style="color:#ef4444;">*</span></label>
-                        <input type="text" name="lab" placeholder="e.g., Lab 101, CS Lab" required 
-                            style="width:100%; padding:16px 20px; border:2px solid #e5e7eb; border-radius:12px; font-size:16px; transition:all 0.3s; box-sizing:border-box;"
+                        <select id="sitin_lab" name="lab" required
+                            onchange="refreshSitInPcOptions()"
+                            style="width:100%; padding:16px 20px; border:2px solid #e5e7eb; border-radius:12px; font-size:16px; transition:all 0.3s; box-sizing:border-box; background:#fff;"
                             onfocus="this.style.borderColor='#6366f1'; this.style.boxShadow='0 0 0 3px rgba(99,102,241,0.1)'"
                             onblur="this.style.borderColor='#e5e7eb'; this.style.boxShadow='none'">
+                            <option value="" selected disabled>Select lab room</option>
+                            <?php foreach ($sitinLabs as $sitinLab): ?>
+                                <option value="<?php echo htmlspecialchars($sitinLab); ?>">Lab <?php echo htmlspecialchars($sitinLab); ?></option>
+                            <?php endforeach; ?>
+                        </select>
                     </div>
                     <div>
                         <label style="display:block; margin-bottom:10px; font-weight:600; color:#374151; font-size:15px;">Sessions <span style="color:#ef4444;">*</span></label>
@@ -950,6 +982,16 @@ if ($search !== '') {
                             onfocus="this.style.borderColor='#10b981'; this.style.boxShadow='0 0 0 3px rgba(16,185,129,0.1)'"
                             onblur="this.style.borderColor='#e5e7eb'; this.style.boxShadow='none'">
                     </div>
+                </div>
+                <div style="margin-top:-10px; margin-bottom:24px;">
+                    <label style="display:block; margin-bottom:10px; font-weight:600; color:#374151; font-size:15px;">PC Seat <span style="color:#ef4444;">*</span></label>
+                    <select id="sitin_pc" name="computer_name" required
+                        style="width:100%; padding:16px 20px; border:2px solid #e5e7eb; border-radius:12px; font-size:16px; transition:all 0.3s; box-sizing:border-box; background:#fff;"
+                        onfocus="this.style.borderColor='#6366f1'; this.style.boxShadow='0 0 0 3px rgba(99,102,241,0.1)'"
+                        onblur="this.style.borderColor='#e5e7eb'; this.style.boxShadow='none'">
+                        <option value="" selected disabled>Select lab first</option>
+                    </select>
+                    <small style="display:block; color:#64748b; margin-top:8px;">Admin assigns the exact PC seat.</small>
                 </div>
 
                 <!-- Buttons -->
@@ -1552,6 +1594,7 @@ if ($search !== '') {
                                 <th>ID Number</th>
                                 <th>Name</th>
                                 <th>Lab</th>
+                                <th>Assign PC</th>
                                 <th>Purpose</th>
                                 <th>Date</th>
                                 <th>Time</th>
@@ -1566,15 +1609,36 @@ if ($search !== '') {
                                         <td><?php echo htmlspecialchars($r['id_number']); ?></td>
                                         <td><?php echo htmlspecialchars($r['student_name']); ?></td>
                                         <td><?php echo htmlspecialchars($r['lab']); ?></td>
+                                        <td>
+                                            <?php
+                                            $pendingPcOptions = [];
+                                            $pendingPcStmt = $conn->prepare("SELECT computer_name FROM computers WHERE lab_name = ? AND status = 'available' ORDER BY computer_name ASC");
+                                            if ($pendingPcStmt) {
+                                                $pendingPcStmt->bind_param('s', $r['lab']);
+                                                $pendingPcStmt->execute();
+                                                $pendingPcResult = $pendingPcStmt->get_result();
+                                                while ($pendingPcRow = $pendingPcResult->fetch_assoc()) {
+                                                    $pendingPcOptions[] = $pendingPcRow['computer_name'];
+                                                }
+                                                $pendingPcStmt->close();
+                                            }
+                                            ?>
+                                            <form method="POST" style="display:flex; gap:5px; align-items:center;">
+                                                <input type="hidden" name="action" value="approve_sitin">
+                                                <input type="hidden" name="sitin_id" value="<?php echo $r['id']; ?>">
+                                                <select name="computer_name" required style="min-width:110px; padding:5px 8px; border:1px solid #d1d5db; border-radius:6px;">
+                                                    <option value="" selected disabled>PC</option>
+                                                    <?php foreach ($pendingPcOptions as $pcName): ?>
+                                                        <option value="<?php echo htmlspecialchars($pcName); ?>"><?php echo htmlspecialchars($pcName); ?></option>
+                                                    <?php endforeach; ?>
+                                                </select>
+                                                <button type="submit" style="background:#10b981; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">Approve</button>
+                                            </form>
+                                        </td>
                                         <td><?php echo htmlspecialchars($r['purpose']); ?></td>
                                         <td><?php echo $r['date'] ? date('M j, Y', strtotime($r['date'])) : '-'; ?></td>
                                         <td><?php echo $r['time_in'] ? date('g:i A', strtotime($r['time_in'])) : '-'; ?></td>
                                         <td style="display:flex; gap:5px;">
-                                            <form method="POST">
-                                                <input type="hidden" name="action" value="approve_sitin">
-                                                <input type="hidden" name="sitin_id" value="<?php echo $r['id']; ?>">
-                                                <button type="submit" style="background:#10b981; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">Approve</button>
-                                            </form>
                                             <form method="POST">
                                                 <input type="hidden" name="action" value="reject_sitin">
                                                 <input type="hidden" name="sitin_id" value="<?php echo $r['id']; ?>">
@@ -1584,7 +1648,7 @@ if ($search !== '') {
                                     </tr>
                                 <?php endwhile; ?>
                             <?php else: ?>
-                                <tr><td colspan="8" style="text-align:center; color:#666;">No pending requests.</td></tr>
+                                <tr><td colspan="9" style="text-align:center; color:#666;">No pending requests.</td></tr>
                             <?php endif; ?>
                         </tbody>
                     </table>
@@ -1599,6 +1663,7 @@ if ($search !== '') {
                                 <th>ID Number</th>
                                 <th>Name</th>
                                 <th>Lab</th>
+                                <th>PC</th>
                                 <th>Purpose</th>
                                 <th>Date</th>
                                 <th>Time</th>
@@ -1613,6 +1678,7 @@ if ($search !== '') {
                                         <td><?php echo htmlspecialchars($r['id_number']); ?></td>
                                         <td><?php echo htmlspecialchars($r['student_name']); ?></td>
                                         <td><?php echo htmlspecialchars($r['lab']); ?></td>
+                                        <td><?php echo htmlspecialchars($r['computer_name'] ?? '-'); ?></td>
                                         <td><?php echo htmlspecialchars($r['purpose']); ?></td>
                                         <td><?php echo $r['date'] ? date('M j, Y', strtotime($r['date'])) : '-'; ?></td>
                                         <td><?php echo $r['time_in'] ? date('g:i A', strtotime($r['time_in'])) : '-'; ?></td>
@@ -1625,7 +1691,7 @@ if ($search !== '') {
                                     </tr>
                                 <?php endwhile; ?>
                             <?php else: ?>
-                                <tr><td colspan="8" style="text-align:center; color:#666;">No approved reservations.</td></tr>
+                                <tr><td colspan="9" style="text-align:center; color:#666;">No approved reservations.</td></tr>
                             <?php endif; ?>
                         </tbody>
                     </table>
@@ -1874,8 +1940,33 @@ if ($search !== '') {
         window.open(exportUrl, '_blank');
     }
 
+    const sitinAvailableComputersByLab = <?php echo json_encode($availableComputersByLab, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>;
     const reservationSeatMapData = <?php echo json_encode($reservationSeatMap, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>;
     const reservationSeatMapCapacity = <?php echo (int)$seatMapCapacity; ?>;
+
+    function refreshSitInPcOptions() {
+        const labSelect = document.getElementById('sitin_lab');
+        const pcSelect = document.getElementById('sitin_pc');
+        if (!labSelect || !pcSelect) return;
+
+        const selectedLab = labSelect.value;
+        const pcList = Array.isArray(sitinAvailableComputersByLab[selectedLab]) ? sitinAvailableComputersByLab[selectedLab] : [];
+        pcSelect.innerHTML = '';
+
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.disabled = true;
+        placeholder.selected = true;
+        placeholder.textContent = pcList.length > 0 ? 'Select PC seat' : 'No available PC in this lab';
+        pcSelect.appendChild(placeholder);
+
+        for (const pcName of pcList) {
+            const opt = document.createElement('option');
+            opt.value = pcName;
+            opt.textContent = pcName;
+            pcSelect.appendChild(opt);
+        }
+    }
 
     function renderReservationSeatMap(labCode) {
         const grid = document.getElementById('resSeatMapGrid');
