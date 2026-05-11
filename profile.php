@@ -515,10 +515,12 @@ $hasAnyFeedback->close();
 </div>
 
 <div id="reservationModal" class="admin-modal">
-    <div class="admin-modal-content">
-        <span class="close-modal" onclick="closeFeature('reservationModal')">&times;</span>
-        <h3>🗓 Student Sit-in Reservation</h3>
-
+    <div class="admin-modal-content" style="position:relative; max-width:540px; width:92%; max-height:calc(100vh - 24px); margin:12px auto 0; padding:0; display:flex; flex-direction:column; overflow:hidden;">
+        <div style="flex-shrink:0; padding:18px 44px 14px 20px; border-bottom:1px solid #e5e7eb;">
+            <span class="close-modal" onclick="closeFeature('reservationModal')" style="top:12px; right:12px;">&times;</span>
+            <h3 style="margin:0; font-size:1.15rem;">🗓 Student Sit-in Reservation</h3>
+        </div>
+        <div id="reservationModalBody" style="flex:1; min-height:0; overflow-y:auto; overflow-x:hidden; padding:18px 20px 24px; -webkit-overflow-scrolling:touch;">
         <?php if ($reservationMessage !== ''): ?>
             <div class="success-message" style="margin-bottom:12px; font-weight:bold; color:#065f46;"><?php echo htmlspecialchars($reservationMessage); ?></div>
         <?php endif; ?>
@@ -607,12 +609,25 @@ $hasAnyFeedback->close();
         <?php else: ?>
             <p>No reservation history yet.</p>
         <?php endif; ?>
+        </div>
+        <div style="flex-shrink:0; padding:10px 16px 14px; border-top:1px solid #e5e7eb; background:#f8fafc; text-align:center;">
+            <button type="button" onclick="scrollReservationModalDown()" style="padding:10px 20px; border:1px solid #cbd5e1; border-radius:8px; background:#fff; color:#334155; font-weight:600; cursor:pointer; font-size:14px;">
+                Scroll down ▼
+            </button>
+            <p style="margin:8px 0 0; font-size:12px; color:#64748b;">Tip: you can also scroll inside the panel above.</p>
+        </div>
     </div>
 </div>
 
 <!-- MODAL END -->
 
 <script>
+    function scrollReservationModalDown() {
+        var el = document.getElementById('reservationModalBody');
+        if (!el) return;
+        el.scrollBy({ top: 240, behavior: 'smooth' });
+    }
+
     document.addEventListener('DOMContentLoaded', function() {
         const profileButton = document.getElementById('profileButton');
         if (profileButton) {

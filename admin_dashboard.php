@@ -1598,12 +1598,30 @@ if ($search !== '') {
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px;">
                     <div>
                         <h4 style="margin-bottom:15px;">➕ Add Computer</h4>
-                        <form method="POST" style="background:#f9fafb; padding:20px; border-radius:12px;">
+                        <?php $addPcControlLabs = ['524', '526', '528', '530', '542', '544']; ?>
+                        <form method="POST" id="addComputerForm" style="background:#f9fafb; padding:20px; border-radius:12px;">
                             <input type="hidden" name="action" value="add_computer">
-                            <label style="display:block; margin-bottom:5px; font-weight:600;">Lab Name</label>
-                            <input type="text" name="lab_name" placeholder="Room code only, e.g. 524 (same as student reservation)" required style="width:100%; padding:10px; border:1px solid #ddd; border-radius:6px; margin-bottom:15px;">
-                            <label style="display:block; margin-bottom:5px; font-weight:600;">Computer Name/Number</label>
-                            <input type="text" name="computer_name" placeholder="e.g., PC-01, PC-02" required style="width:100%; padding:10px; border:1px solid #ddd; border-radius:6px; margin-bottom:15px;">
+                            <label style="display:block; margin-bottom:5px; font-weight:600;">Lab</label>
+                            <select name="lab_name" required style="width:100%; padding:10px; border:1px solid #ddd; border-radius:6px; margin-bottom:15px; background:#fff;">
+                                <option value="" disabled selected>Select lab room</option>
+                                <?php foreach ($addPcControlLabs as $addLab): ?>
+                                    <option value="<?php echo htmlspecialchars($addLab); ?>">Lab <?php echo htmlspecialchars($addLab); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                            <label style="display:block; margin-bottom:5px; font-weight:600;">Computer name / number</label>
+                            <select id="addPcComputerSelect" required style="width:100%; padding:10px; border:1px solid #ddd; border-radius:6px; margin-bottom:8px; background:#fff;">
+                                <option value="" disabled selected>Select PC label</option>
+                                <?php for ($pci = 1; $pci <= 50; $pci++):
+                                    $pcn = sprintf('PC-%02d', $pci); ?>
+                                    <option value="<?php echo htmlspecialchars($pcn); ?>"><?php echo htmlspecialchars($pcn); ?></option>
+                                <?php endfor; ?>
+                                <option value="__custom__">Other (custom name)…</option>
+                            </select>
+                            <div id="addPcComputerCustomWrap" style="display:none; margin-bottom:15px;">
+                                <label style="display:block; margin-bottom:5px; font-size:13px; color:#475569;">Custom name</label>
+                                <input type="text" id="addPcComputerCustomInput" autocomplete="off" maxlength="50" placeholder="e.g., PC-TEACHER-1" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:6px; box-sizing:border-box;">
+                            </div>
+                            <input type="hidden" name="computer_name" id="addPcComputerNameHidden" value="">
                             <button type="submit" style="padding:10px 20px; background:#10b981; color:white; border:none; border-radius:6px; cursor:pointer; font-weight:600;">Add Computer</button>
                         </form>
                     </div>
@@ -2115,12 +2133,45 @@ if ($search !== '') {
      });
      <?php endif; ?>
 
+    function syncAddComputerNameFromUi() {
+        const sel = document.getElementById('addPcComputerSelect');
+        const hid = document.getElementById('addPcComputerNameHidden');
+        const custom = document.getElementById('addPcComputerCustomInput');
+        const wrap = document.getElementById('addPcComputerCustomWrap');
+        if (!sel || !hid) return;
+        if (sel.value === '__custom__') {
+            if (wrap) wrap.style.display = 'block';
+            hid.value = custom ? custom.value.trim() : '';
+        } else {
+            if (wrap) wrap.style.display = 'none';
+            hid.value = sel.value;
+        }
+    }
+
     document.addEventListener('DOMContentLoaded', function() {
         const mapLabSelect = document.getElementById('resSeatMapLabSelect');
         if (mapLabSelect) {
             renderReservationSeatMap(mapLabSelect.value);
             mapLabSelect.addEventListener('change', function() {
                 renderReservationSeatMap(this.value);
+            });
+        }
+
+        const addPcForm = document.getElementById('addComputerForm');
+        const addPcSel = document.getElementById('addPcComputerSelect');
+        const addPcCustom = document.getElementById('addPcComputerCustomInput');
+        if (addPcForm && addPcSel) {
+            addPcSel.addEventListener('change', syncAddComputerNameFromUi);
+            if (addPcCustom) {
+                addPcCustom.addEventListener('input', syncAddComputerNameFromUi);
+            }
+            addPcForm.addEventListener('submit', function(e) {
+                syncAddComputerNameFromUi();
+                const hid = document.getElementById('addPcComputerNameHidden');
+                if (!hid || !hid.value) {
+                    e.preventDefault();
+                    alert('Please choose a computer label or enter a custom name.');
+                }
             });
         }
     });
