@@ -1,4 +1,8 @@
 <?php
+// Set session to expire in 30 days
+$expire = 60 * 60 * 24 * 30; // 30 days in seconds
+ini_set('session.gc_maxlifetime', $expire);
+session_set_cookie_params($expire);
 session_start();
 include "db.php";
 
@@ -34,13 +38,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         exit();
     }
 
-    // Insert into database
+    // Insert into database (30 sit-in sessions for new students)
+    $remaining_sessions = 30;
     $sql = "INSERT INTO students 
-    (id_number, last_name, first_name, middle_name, course, year_level, email, address, password)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    (id_number, last_name, first_name, middle_name, course, year_level, email, address, password, remaining_sessions)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
     $stmt = $conn->prepare($sql);
-    $stmt->bind_param("sssssssss", $id, $last, $first, $middle, $course, $year, $email, $address, $hashed_pass);
+    $stmt->bind_param("sssssssssi", $id, $last, $first, $middle, $course, $year, $email, $address, $hashed_pass, $remaining_sessions);
 
     if ($stmt->execute()) {
         echo "<script>alert('Registered Successfully!'); window.location='login.php';</script>";

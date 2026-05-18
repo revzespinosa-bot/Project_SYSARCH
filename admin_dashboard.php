@@ -1,6 +1,8 @@
 <?php
 session_start();
 include 'db.php';
+require_once __DIR__ . '/includes/app_bootstrap.php';
+app_bootstrap_schema($conn);
 
 /**
  * Lab values from students (e.g. "524") often differ from computers.lab_name ("Lab 524").
@@ -28,6 +30,140 @@ function admin_stmt_bind_params(mysqli_stmt $stmt, $types, array $params) {
         $refs[] = &$params[$key];
     }
     return call_user_func_array([$stmt, 'bind_param'], $refs);
+}
+
+define('ADMIN_LAB_SEAT_CAPACITY', 50);
+
+/** Extract seat number from labels like Seat 01, PC-02, pc 3. */
+function admin_seat_number_from_name($name) {
+    if (preg_match('/(\d+)/', (string)$name, $m)) {
+        return (int)$m[1];
+    }
+    return null;
+}
+
+function admin_seat_label($seatNum) {
+    return 'Seat ' . str_pad((string)$seatNum, 2, '0', STR_PAD_LEFT);
+}
+
+function admin_preferred_lab_storage_key(array $labKeys) {
+    foreach ($labKeys as $key) {
+        if (preg_match('/^\d+$/', $key)) {
+            return $key;
+        }
+    }
+    return $labKeys[0] ?? '';
+}
+
+/** PCs in a lab for reservation assign dropdown — always Seat 01 through Seat 50. */
+function admin_get_lab_computers(mysqli $conn, $lab, $capacity = ADMIN_LAB_SEAT_CAPACITY) {
+    $keys = admin_lab_name_match_keys($lab);
+    $bySeat = [];
+
+    if (!empty($keys)) {
+        $in = implode(',', array_fill(0, count($keys), '?'));
+        $stmt = $conn->prepare("SELECT computer_name, status FROM computers WHERE lab_name IN ($in) ORDER BY computer_name ASC");
+        if ($stmt) {
+            $types = str_repeat('s', count($keys));
+            admin_stmt_bind_params($stmt, $types, $keys);
+            $stmt->execute();
+            $res = $stmt->get_result();
+            while ($row = $res->fetch_assoc()) {
+                $seatNum = admin_seat_number_from_name($row['computer_name']);
+                if ($seatNum !== null && $seatNum >= 1 && $seatNum <= $capacity) {
+                    $bySeat[$seatNum] = [
+                        'name' => admin_seat_label($seatNum),
+                        'status' => $row['status'],
+                        'db_name' => $row['computer_name'],
+                    ];
+                }
+            }
+            $stmt->close();
+        }
+    }
+
+    $list = [];
+    for ($i = 1; $i <= $capacity; $i++) {
+        if (isset($bySeat[$i])) {
+            $list[] = $bySeat[$i];
+        } else {
+            $list[] = [
+                'name' => admin_seat_label($i),
+                'status' => 'available',
+                'db_name' => null,
+            ];
+        }
+    }
+    return $list;
+}
+
+/** Lock an available PC or create the seat row when approving / starting sit-in. */
+function admin_reserve_computer(mysqli $conn, $lab, $selectedComputer) {
+    $selectedComputer = trim((string)$selectedComputer);
+    if ($selectedComputer === '') {
+        return null;
+    }
+
+    $labKeys = admin_lab_name_match_keys($lab);
+    if (empty($labKeys)) {
+        return null;
+    }
+
+    $labIn = implode(',', array_fill(0, count($labKeys), '?'));
+    $seatNum = admin_seat_number_from_name($selectedComputer);
+    $canonicalName = ($seatNum !== null && $seatNum >= 1 && $seatNum <= ADMIN_LAB_SEAT_CAPACITY)
+        ? admin_seat_label($seatNum)
+        : $selectedComputer;
+
+    $pcStmt = $conn->prepare("SELECT id, computer_name, status FROM computers WHERE computer_name = ? AND lab_name IN ($labIn) LIMIT 1");
+    $typesPc = 's' . str_repeat('s', count($labKeys));
+    admin_stmt_bind_params($pcStmt, $typesPc, array_merge([$selectedComputer], $labKeys));
+    $pcStmt->execute();
+    $pcData = $pcStmt->get_result()->fetch_assoc();
+    $pcStmt->close();
+
+    if (!$pcData && $seatNum !== null) {
+        $pcStmt = $conn->prepare("SELECT id, computer_name, status FROM computers WHERE lab_name IN ($labIn)");
+        $typesAll = str_repeat('s', count($labKeys));
+        admin_stmt_bind_params($pcStmt, $typesAll, $labKeys);
+        $pcStmt->execute();
+        $allPcs = $pcStmt->get_result();
+        while ($row = $allPcs->fetch_assoc()) {
+            if (admin_seat_number_from_name($row['computer_name']) === $seatNum) {
+                $pcData = $row;
+                break;
+            }
+        }
+        $pcStmt->close();
+    }
+
+    if ($pcData) {
+        if ($pcData['status'] !== 'available') {
+            return null;
+        }
+        $computerId = (int)$pcData['id'];
+        $lockPcStmt = $conn->prepare("UPDATE computers SET status = 'in_use' WHERE id = ? AND status = 'available'");
+        $lockPcStmt->bind_param('i', $computerId);
+        $lockPcStmt->execute();
+        $locked = $lockPcStmt->affected_rows > 0;
+        $lockPcStmt->close();
+        return $locked ? trim((string)$pcData['computer_name']) : null;
+    }
+
+    $storageLab = admin_preferred_lab_storage_key($labKeys);
+    if ($storageLab === '') {
+        return null;
+    }
+
+    $insertName = $canonicalName;
+    $ins = $conn->prepare("INSERT INTO computers (lab_name, computer_name, status) VALUES (?, ?, 'in_use')");
+    $ins->bind_param('ss', $storageLab, $insertName);
+    if ($ins->execute()) {
+        $ins->close();
+        return $insertName;
+    }
+    $ins->close();
+    return null;
 }
 
 if (!isset($_SESSION['id_number']) || !isset($_SESSION['is_admin']) || !$_SESSION['is_admin']) {
@@ -258,6 +394,57 @@ if (isset($_GET['export']) && $_GET['export'] !== '') {
                 header("Location: admin_dashboard.php?announcement_posted=1");
                 exit();
             }
+        } elseif ($_POST['action'] === 'toggle_reservation') {
+            $enabled = isset($_POST['reservation_enabled']) && $_POST['reservation_enabled'] === '1' ? '1' : '0';
+            app_set_setting($conn, 'reservation_enabled', $enabled);
+            header('Location: admin_dashboard.php?settings_saved=1');
+            exit();
+        } elseif ($_POST['action'] === 'add_software') {
+            $lab_name = trim($_POST['lab_name'] ?? '');
+            $software_name = trim($_POST['software_name'] ?? '');
+            $version = trim($_POST['version'] ?? '');
+            if ($lab_name !== '' && $software_name !== '') {
+                $stmt = $conn->prepare('INSERT INTO lab_software (lab_name, software_name, version) VALUES (?, ?, ?)');
+                $stmt->bind_param('sss', $lab_name, $software_name, $version);
+                $stmt->execute();
+                $stmt->close();
+            }
+            header('Location: admin_dashboard.php?software_saved=1');
+            exit();
+        } elseif ($_POST['action'] === 'delete_software') {
+            $swId = intval($_POST['software_id'] ?? 0);
+            if ($swId > 0) {
+                $stmt = $conn->prepare('DELETE FROM lab_software WHERE id = ?');
+                $stmt->bind_param('i', $swId);
+                $stmt->execute();
+                $stmt->close();
+            }
+            header('Location: admin_dashboard.php?software_deleted=1');
+            exit();
+        } elseif ($_POST['action'] === 'import_software_csv' && isset($_FILES['software_csv']) && $_FILES['software_csv']['error'] === UPLOAD_ERR_OK) {
+            $handle = fopen($_FILES['software_csv']['tmp_name'], 'r');
+            if ($handle) {
+                $rowNum = 0;
+                while (($data = fgetcsv($handle)) !== false) {
+                    $rowNum++;
+                    if ($rowNum === 1 && isset($data[0]) && stripos($data[0], 'lab') !== false) {
+                        continue;
+                    }
+                    $lab = trim($data[0] ?? '');
+                    $name = trim($data[1] ?? '');
+                    $ver = trim($data[2] ?? '');
+                    if ($lab === '' || $name === '') {
+                        continue;
+                    }
+                    $stmt = $conn->prepare('INSERT INTO lab_software (lab_name, software_name, version) VALUES (?, ?, ?)');
+                    $stmt->bind_param('sss', $lab, $name, $ver);
+                    $stmt->execute();
+                    $stmt->close();
+                }
+                fclose($handle);
+            }
+            header('Location: admin_dashboard.php?software_imported=1');
+            exit();
         }
     }
 
@@ -283,34 +470,8 @@ if (isset($_GET['export']) && $_GET['export'] !== '') {
                 exit();
             }
 
-            $labKeys = admin_lab_name_match_keys($lab);
-            if (empty($labKeys)) {
-                header("Location: admin_dashboard.php?lab_full=1");
-                exit();
-            }
-            $labIn = implode(',', array_fill(0, count($labKeys), '?'));
-            $pcStmt = $conn->prepare("SELECT id, computer_name FROM computers WHERE computer_name = ? AND lab_name IN ($labIn) AND status = 'available' LIMIT 1");
-            $typesPc = 's' . str_repeat('s', count($labKeys));
-            admin_stmt_bind_params($pcStmt, $typesPc, array_merge([$selectedComputer], $labKeys));
-            $pcStmt->execute();
-            $pcData = $pcStmt->get_result()->fetch_assoc();
-            $pcStmt->close();
-
-            if (!$pcData) {
-                header("Location: admin_dashboard.php?lab_full=1");
-                exit();
-            }
-
-            $computerId = (int)$pcData['id'];
-            $computerName = trim((string)$pcData['computer_name']);
-
-            $lockPcStmt = $conn->prepare("UPDATE computers SET status = 'in_use' WHERE id = ? AND status = 'available'");
-            $lockPcStmt->bind_param("i", $computerId);
-            $lockPcStmt->execute();
-            $pcLocked = $lockPcStmt->affected_rows > 0;
-            $lockPcStmt->close();
-
-            if (!$pcLocked) {
+            $computerName = admin_reserve_computer($conn, $lab, $selectedComputer);
+            if ($computerName === null) {
                 header("Location: admin_dashboard.php?lab_full=1");
                 exit();
             }
@@ -339,34 +500,8 @@ if (isset($_GET['export']) && $_GET['export'] !== '') {
             $remaining_sessions = intval($_POST['remaining_sessions']);
             
             if ($id_number && $student_name && $purpose && $lab && $selectedComputer && $remaining_sessions > 0) {
-                $labKeys = admin_lab_name_match_keys($lab);
-                if (empty($labKeys)) {
-                    header("Location: admin_dashboard.php?lab_full=1");
-                    exit();
-                }
-                $labIn = implode(',', array_fill(0, count($labKeys), '?'));
-                $pcStmt = $conn->prepare("SELECT id, computer_name FROM computers WHERE computer_name = ? AND lab_name IN ($labIn) AND status = 'available' LIMIT 1");
-                $typesPc = 's' . str_repeat('s', count($labKeys));
-                admin_stmt_bind_params($pcStmt, $typesPc, array_merge([$selectedComputer], $labKeys));
-                $pcStmt->execute();
-                $pcData = $pcStmt->get_result()->fetch_assoc();
-                $pcStmt->close();
-
-                if (!$pcData) {
-                    header("Location: admin_dashboard.php?lab_full=1");
-                    exit();
-                }
-
-                $computerId = (int)$pcData['id'];
-                $computerName = trim((string)$pcData['computer_name']);
-
-                $lockPcStmt = $conn->prepare("UPDATE computers SET status = 'in_use' WHERE id = ? AND status = 'available'");
-                $lockPcStmt->bind_param("i", $computerId);
-                $lockPcStmt->execute();
-                $pcLocked = $lockPcStmt->affected_rows > 0;
-                $lockPcStmt->close();
-
-                if (!$pcLocked) {
+                $computerName = admin_reserve_computer($conn, $lab, $selectedComputer);
+                if ($computerName === null) {
                     header("Location: admin_dashboard.php?lab_full=1");
                     exit();
                 }
@@ -386,7 +521,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['logout_student_id']))
     $sit_id = intval($_POST['logout_student_id']);
     
     // Get sit-in details first
-    $sitStmt = $conn->prepare("SELECT id_number, student_name, purpose, lab, computer_name, remaining_sessions FROM sitin_reservations WHERE id = ? AND status = 'approved'");
+    $sitStmt = $conn->prepare("SELECT id_number, student_name, purpose, lab, computer_name, remaining_sessions, time_in, `date` FROM sitin_reservations WHERE id = ? AND status = 'approved'");
     $sitStmt->bind_param("i", $sit_id);
     $sitStmt->execute();
     $sitDetails = $sitStmt->get_result()->fetch_assoc();
@@ -395,10 +530,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['logout_student_id']))
     if ($sitDetails) {
         $student_id = $sitDetails['id_number'];
         $sessions_used = 1; // Deduct 1 session per sit-in
+        $time_in_val = app_resolve_sitin_time_in($sitDetails);
+        $pc_name = !empty($sitDetails['computer_name']) ? $sitDetails['computer_name'] : '';
         
         // 1. Move to history table
-        $historyStmt = $conn->prepare("INSERT INTO sitin_history (id_number, student_name, purpose, lab, sessions_used, time_out) VALUES (?, ?, ?, ?, ?, NOW())");
-        $historyStmt->bind_param("sssii", $student_id, $sitDetails['student_name'], $sitDetails['purpose'], $sitDetails['lab'], $sessions_used);
+        $historyStmt = $conn->prepare("INSERT INTO sitin_history (id_number, student_name, purpose, lab, computer_name, sessions_used, time_in, time_out, status) VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), 'completed')");
+        $historyStmt->bind_param("sssssis", $student_id, $sitDetails['student_name'], $sitDetails['purpose'], $sitDetails['lab'], $pc_name, $sessions_used, $time_in_val);
         $historyStmt->execute();
         $historyStmt->close();
         
@@ -562,6 +699,11 @@ $leaderboardResult = $conn->query($leaderboardQuery);
 $totalSessionsUsed = $conn->query("SELECT COALESCE(SUM(sessions_used), 0) as total FROM sitin_history")->fetch_assoc()['total'];
 $totalStudentsSitin = $conn->query("SELECT COUNT(DISTINCT id_number) as total FROM sitin_history")->fetch_assoc()['total'];
 
+$adminAnalytics = app_admin_analytics($conn);
+$adminAiTips = app_admin_ai_recommendations($conn);
+$labSoftwareResult = $conn->query('SELECT * FROM lab_software ORDER BY lab_name, software_name');
+$reservationEnabled = app_reservations_enabled($conn);
+
 // Reservation counts for dashboard
 $pendingCount = $conn->query("SELECT COUNT(*) as cnt FROM sitin_reservations WHERE status = 'pending'")->fetch_assoc()['cnt'];
 $approvedCount = $conn->query("SELECT COUNT(*) as cnt FROM sitin_reservations WHERE status = 'approved'")->fetch_assoc()['cnt'];
@@ -617,6 +759,12 @@ $rejectedCount = $conn->query("SELECT COUNT(*) as cnt FROM sitin_reservations WH
              📢 Announcement posted successfully!
          </div>
      <?php endif; ?>
+     <?php if (isset($_GET['settings_saved'])): ?>
+         <div style="background:#d1fae5;color:#065f46;padding:12px 24px;text-align:center;font-weight:600;">Reservation setting updated.</div>
+     <?php endif; ?>
+     <?php if (isset($_GET['software_saved']) || isset($_GET['software_imported']) || isset($_GET['software_deleted'])): ?>
+         <div style="background:#dbeafe;color:#1e40af;padding:12px 24px;text-align:center;font-weight:600;">Software list updated.</div>
+     <?php endif; ?>
 
      <div class="admin-layout">
         <aside class="admin-sidebar">
@@ -628,6 +776,9 @@ $rejectedCount = $conn->query("SELECT COUNT(*) as cnt FROM sitin_reservations WH
                 <li><button type="button" onclick="openFeature('currentSitInModal')">Current Sit-in</button></li>
                 <li><button type="button" onclick="openFeature('recordsModal')">View Sit-in Records</button></li>
                 <li><button type="button" onclick="openFeature('reportsModal')">Sit-in Reports</button></li>
+                <li><button type="button" onclick="openFeature('analyticsModal')">Analytics</button></li>
+                <li><button type="button" onclick="openFeature('aiModal')">AI Recommendations</button></li>
+                <li><button type="button" onclick="openFeature('softwareModal')">Software Apps</button></li>
                 <li><button type="button" onclick="openFeature('announcementModal')">Announcements</button></li>
                 <li><button type="button" onclick="openFeature('feedbackModal')">Feedback Reports</button></li>
                 <li><button type="button" onclick="openFeature('reservationModal')" style="position:relative;">
@@ -974,26 +1125,10 @@ if ($search !== '') {
             </div>
 
             <?php
-            $availableComputersByLab = [];
+            $sitinPcsByLab = [];
             $sitinLabs = ['524', '526', '528', '530', '542', '544'];
             foreach ($sitinLabs as $sitinLab) {
-                $availableComputersByLab[$sitinLab] = [];
-                $labKeys = admin_lab_name_match_keys($sitinLab);
-                if (empty($labKeys)) {
-                    continue;
-                }
-                $labIn = implode(',', array_fill(0, count($labKeys), '?'));
-                $pcListStmt = $conn->prepare("SELECT DISTINCT computer_name FROM computers WHERE lab_name IN ($labIn) AND status = 'available' ORDER BY computer_name ASC");
-                if ($pcListStmt) {
-                    $typesL = str_repeat('s', count($labKeys));
-                    admin_stmt_bind_params($pcListStmt, $typesL, $labKeys);
-                    $pcListStmt->execute();
-                    $pcListResult = $pcListStmt->get_result();
-                    while ($pcRow = $pcListResult->fetch_assoc()) {
-                        $availableComputersByLab[$sitinLab][] = $pcRow['computer_name'];
-                    }
-                    $pcListStmt->close();
-                }
+                $sitinPcsByLab[$sitinLab] = admin_get_lab_computers($conn, $sitinLab);
             }
             ?>
             <form method="POST">
@@ -1507,10 +1642,23 @@ if ($search !== '') {
         </div>
     </div>
 
+    <?php include __DIR__ . '/includes/admin_extra_modals.php'; ?>
+
     <div class="admin-modal" id="reservationModal" style="display:none;">
         <div class="admin-modal-content" style="max-width:1100px; width:95%;">
             <span class="close-modal" onclick="closeFeature('reservationModal')">&times;</span>
             <h3>🖥️ Reservation Management</h3>
+            <form method="POST" style="display:flex;align-items:center;gap:12px;margin:12px 0 20px;padding:12px;background:#f1f5f9;border-radius:10px;flex-wrap:wrap;">
+                <input type="hidden" name="action" value="toggle_reservation">
+                <strong>Student reservations:</strong>
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                    <input type="radio" name="reservation_enabled" value="1" <?php echo $reservationEnabled ? 'checked' : ''; ?>> Enabled
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                    <input type="radio" name="reservation_enabled" value="0" <?php echo !$reservationEnabled ? 'checked' : ''; ?>> Disabled
+                </label>
+                <button type="submit" style="padding:8px 14px;background:#6366f1;color:#fff;border:none;border-radius:6px;cursor:pointer;">Save</button>
+            </form>
              
             <div style="display:flex; gap:10px; margin-bottom:20px; border-bottom:2px solid #e5e7eb; padding-bottom:10px;">
                 <button type="button" onclick="showResTab('seatMap')" id="resTabSeatMap" style="padding:10px 20px; border:none; border-radius:8px; background:#6366f1; color:white; cursor:pointer; font-weight:600;">Seat Map</button>
@@ -1666,6 +1814,10 @@ if ($search !== '') {
                 $pendingReservations = $conn->query("SELECT * FROM sitin_reservations WHERE status = 'pending' ORDER BY created_at DESC");
                 $approvedReservations = $conn->query("SELECT * FROM sitin_reservations WHERE status = 'approved' ORDER BY created_at DESC");
                 $today = date('Y-m-d');
+                $reservationPcsByLab = [];
+                foreach (['524', '526', '528', '530', '542', '544'] as $resLabCode) {
+                    $reservationPcsByLab[$resLabCode] = admin_get_lab_computers($conn, $resLabCode);
+                }
                 ?>
                 <h4 style="margin-bottom:15px;">⏳ Pending Requests (<?php echo $pendingReservations ? $pendingReservations->num_rows : 0; ?>)</h4>
                 <div style="max-height:200px; overflow:auto; margin-bottom:20px;">
@@ -1676,60 +1828,67 @@ if ($search !== '') {
                                 <th>ID Number</th>
                                 <th>Name</th>
                                 <th>Lab</th>
-                                <th>Assign PC</th>
                                 <th>Purpose</th>
                                 <th>Date</th>
                                 <th>Time</th>
+                                <th>Assign PC</th>
                                 <th>Action</th>
                             </tr>
                         </thead>
                         <tbody>
                             <?php if ($pendingReservations && $pendingReservations->num_rows > 0): ?>
                                 <?php while ($r = $pendingReservations->fetch_assoc()): ?>
+                                    <?php
+                                    $pendingLabPcs = admin_get_lab_computers($conn, $r['lab']);
+                                    $pendingAvailableCount = 0;
+                                    foreach ($pendingLabPcs as $pcRow) {
+                                        if ($pcRow['status'] === 'available') {
+                                            $pendingAvailableCount++;
+                                        }
+                                    }
+                                    ?>
                                     <tr>
                                         <td><?php echo $r['id']; ?></td>
                                         <td><?php echo htmlspecialchars($r['id_number']); ?></td>
                                         <td><?php echo htmlspecialchars($r['student_name']); ?></td>
                                         <td><?php echo htmlspecialchars($r['lab']); ?></td>
-                                        <td>
-                                            <?php
-                                            $pendingPcOptions = [];
-                                            $pendingLabKeys = admin_lab_name_match_keys($r['lab']);
-                                            if (!empty($pendingLabKeys)) {
-                                                $pIn = implode(',', array_fill(0, count($pendingLabKeys), '?'));
-                                                $pendingPcStmt = $conn->prepare("SELECT DISTINCT computer_name FROM computers WHERE lab_name IN ($pIn) AND status = 'available' ORDER BY computer_name ASC");
-                                                if ($pendingPcStmt) {
-                                                    $typesP = str_repeat('s', count($pendingLabKeys));
-                                                    admin_stmt_bind_params($pendingPcStmt, $typesP, $pendingLabKeys);
-                                                    $pendingPcStmt->execute();
-                                                    $pendingPcResult = $pendingPcStmt->get_result();
-                                                    while ($pendingPcRow = $pendingPcResult->fetch_assoc()) {
-                                                        $pendingPcOptions[] = $pendingPcRow['computer_name'];
-                                                    }
-                                                    $pendingPcStmt->close();
-                                                }
-                                            }
-                                            ?>
-                                            <form method="POST" style="display:flex; gap:5px; align-items:center; flex-wrap:wrap;">
-                                                <input type="hidden" name="action" value="approve_sitin">
-                                                <input type="hidden" name="sitin_id" value="<?php echo $r['id']; ?>">
-                                                <select name="computer_name" required style="min-width:140px; padding:5px 8px; border:1px solid #d1d5db; border-radius:6px; position:relative; z-index:2;">
-                                                    <option value="" selected disabled><?php echo empty($pendingPcOptions) ? 'No PCs — add in Computer tab' : 'Select PC'; ?></option>
-                                                    <?php foreach ($pendingPcOptions as $pcName): ?>
-                                                        <option value="<?php echo htmlspecialchars($pcName); ?>"><?php echo htmlspecialchars($pcName); ?></option>
-                                                    <?php endforeach; ?>
-                                                </select>
-                                                <button type="submit" style="background:#10b981; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">Approve</button>
-                                            </form>
-                                        </td>
                                         <td><?php echo htmlspecialchars($r['purpose']); ?></td>
                                         <td><?php echo $r['date'] ? date('M j, Y', strtotime($r['date'])) : '-'; ?></td>
                                         <td><?php echo $r['time_in'] ? date('g:i A', strtotime($r['time_in'])) : '-'; ?></td>
-                                        <td style="display:flex; gap:5px;">
-                                            <form method="POST">
+                                        <td>
+                                            <form method="POST" class="reservation-approve-form">
+                                                <input type="hidden" name="action" value="approve_sitin">
+                                                <input type="hidden" name="sitin_id" value="<?php echo (int)$r['id']; ?>">
+                                                <label style="display:block;font-size:11px;font-weight:600;color:#64748b;margin-bottom:4px;">Select PC seat</label>
+                                                <select name="computer_name" class="reservation-pc-select" required
+                                                    style="width:100%;min-width:170px;padding:8px 10px;border:2px solid #c7d2fe;border-radius:8px;font-size:14px;background:#fff;cursor:pointer;">
+                                                    <option value="" selected disabled>— Choose seat (1–50) —</option>
+                                                    <?php foreach ($pendingLabPcs as $pcRow): ?>
+                                                        <?php
+                                                        $pcLabel = $pcRow['name'];
+                                                        if ($pcRow['status'] === 'in_use') {
+                                                            $pcLabel .= ' (In use)';
+                                                        } elseif ($pcRow['status'] === 'maintenance') {
+                                                            $pcLabel .= ' (Maintenance)';
+                                                        }
+                                                        ?>
+                                                        <option value="<?php echo htmlspecialchars($pcRow['name']); ?>"
+                                                            <?php echo $pcRow['status'] !== 'available' ? 'disabled' : ''; ?>>
+                                                            <?php echo htmlspecialchars($pcLabel); ?>
+                                                        </option>
+                                                    <?php endforeach; ?>
+                                                </select>
+                                                <small style="display:block;margin-top:4px;color:#64748b;font-size:11px;">
+                                                    <?php echo $pendingAvailableCount; ?> vacant PC(s) in this lab
+                                                </small>
+                                                <button type="submit" style="margin-top:8px;width:100%;background:#10b981;color:white;border:none;padding:8px 12px;border-radius:6px;cursor:pointer;font-weight:600;">Approve</button>
+                                            </form>
+                                        </td>
+                                        <td style="vertical-align:top;">
+                                            <form method="POST" style="margin-top:22px;">
                                                 <input type="hidden" name="action" value="reject_sitin">
-                                                <input type="hidden" name="sitin_id" value="<?php echo $r['id']; ?>">
-                                                <button type="submit" style="background:#ef4444; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">Reject</button>
+                                                <input type="hidden" name="sitin_id" value="<?php echo (int)$r['id']; ?>">
+                                                <button type="submit" style="background:#ef4444;color:white;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-weight:600;">Reject</button>
                                             </form>
                                         </td>
                                     </tr>
@@ -2027,7 +2186,7 @@ if ($search !== '') {
         window.open(exportUrl, '_blank');
     }
 
-    const sitinAvailableComputersByLab = <?php echo json_encode($availableComputersByLab, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>;
+    const sitinPcsByLab = <?php echo json_encode($sitinPcsByLab, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>;
     const reservationSeatMapData = <?php echo json_encode($reservationSeatMap, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>;
     const reservationSeatMapCapacity = <?php echo (int)$seatMapCapacity; ?>;
 
@@ -2037,20 +2196,27 @@ if ($search !== '') {
         if (!labSelect || !pcSelect) return;
 
         const selectedLab = labSelect.value;
-        const pcList = Array.isArray(sitinAvailableComputersByLab[selectedLab]) ? sitinAvailableComputersByLab[selectedLab] : [];
+        const pcList = Array.isArray(sitinPcsByLab[selectedLab]) ? sitinPcsByLab[selectedLab] : [];
         pcSelect.innerHTML = '';
 
         const placeholder = document.createElement('option');
         placeholder.value = '';
         placeholder.disabled = true;
         placeholder.selected = true;
-        placeholder.textContent = pcList.length > 0 ? 'Select PC seat' : 'No available PC in this lab';
+        placeholder.textContent = '— Choose seat (1–50) —';
         pcSelect.appendChild(placeholder);
 
-        for (const pcName of pcList) {
+        for (const pc of pcList) {
             const opt = document.createElement('option');
-            opt.value = pcName;
-            opt.textContent = pcName;
+            opt.value = pc.name;
+            let label = pc.name;
+            if (pc.status === 'in_use') {
+                label += ' (In use)';
+            } else if (pc.status === 'maintenance') {
+                label += ' (Maintenance)';
+            }
+            opt.textContent = label;
+            opt.disabled = pc.status !== 'available';
             pcSelect.appendChild(opt);
         }
     }

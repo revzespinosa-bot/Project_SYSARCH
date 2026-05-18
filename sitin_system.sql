@@ -111,6 +111,36 @@ INSERT INTO `computers` (`id`, `lab_name`, `computer_name`, `status`, `created_a
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `system_settings`
+--
+
+CREATE TABLE `system_settings` (
+  `setting_key` varchar(100) NOT NULL,
+  `setting_value` text NOT NULL,
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+INSERT INTO `system_settings` (`setting_key`, `setting_value`) VALUES
+('reservation_enabled', '1');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `lab_software`
+--
+
+CREATE TABLE `lab_software` (
+  `id` int(11) NOT NULL,
+  `lab_name` varchar(50) NOT NULL,
+  `software_name` varchar(150) NOT NULL,
+  `version` varchar(50) DEFAULT NULL,
+  `notes` varchar(255) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `feedback`
 --
 
@@ -183,6 +213,7 @@ CREATE TABLE `sitin_history` (
   `student_name` varchar(150) NOT NULL,
   `purpose` varchar(255) NOT NULL,
   `lab` varchar(50) NOT NULL,
+  `computer_name` varchar(50) DEFAULT NULL,
   `sessions_used` int(11) NOT NULL DEFAULT 1,
   `time_in` timestamp NOT NULL DEFAULT current_timestamp(),
   `time_out` timestamp NULL DEFAULT NULL,
@@ -281,7 +312,7 @@ CREATE TABLE `students` (
   `password` varchar(255) NOT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `photo` varchar(255) DEFAULT NULL,
-  `remaining_sessions` int(11) DEFAULT 28
+  `remaining_sessions` int(11) DEFAULT 30
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --

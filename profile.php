@@ -1,6 +1,8 @@
 <?php
 session_start();
 include "db.php";
+require_once __DIR__ . '/includes/app_bootstrap.php';
+app_bootstrap_schema($conn);
 
 // Check if user is logged in
 if(!isset($_SESSION['id_number'])){
@@ -53,7 +55,7 @@ if ($checkCol3 && $checkCol3->fetch_assoc()['cnt'] == 0) {
 }
 
 $reservationMessage = '';
-$stmt = $conn->prepare("SELECT id_number, first_name, last_name, middle_name, course, year_level, email, address, photo, COALESCE(remaining_sessions, 28) as remaining_sessions FROM students WHERE id_number = ?");
+$stmt = $conn->prepare("SELECT id_number, first_name, last_name, middle_name, course, year_level, email, address, photo, COALESCE(remaining_sessions, 30) as remaining_sessions FROM students WHERE id_number = ?");
 $stmt->bind_param("s", $id);
 $stmt->execute();
 $result = $stmt->get_result();
@@ -65,8 +67,14 @@ if(!$user){
 }
 
 $reservationMessage = '';
+$reservationsEnabled = app_reservations_enabled($conn);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'reserve_sitin') {
+    if (!$reservationsEnabled) {
+        $reservationMessage = 'Reservations are temporarily disabled by the administrator.';
+    } elseif ((int)$user['remaining_sessions'] <= 0) {
+        $reservationMessage = 'You have no sessions left. Contact the admin.';
+    } else {
     $id_number = $conn->real_escape_string($_POST['id_number']);
     $student_name = $conn->real_escape_string($_POST['student_name']);
     $purpose = $conn->real_escape_string($_POST['purpose']);
@@ -86,6 +94,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             $reservationMessage = '❌ Could not create reservation. Please try again.';
         }
         $insertStmt->close();
+    }
     }
 }
 
@@ -130,6 +139,10 @@ if ($historyResult) {
     }
 }
 $studentHistory->close();
+
+$sitinSummary = app_build_student_summary($conn, $id);
+$sessionsTableRows = app_build_student_sessions_table($conn, $id);
+$labAvailability = app_lab_availability($conn);
 
 // Ensure feedback table exists
 $conn->query("CREATE TABLE IF NOT EXISTS feedback (
@@ -210,8 +223,12 @@ $hasAnyFeedback->close();
         </div>
         <a href="Profile.php">Home</a>
         <a href="#" id="profileButton">Edit Profile</a>
+        <a href="#" onclick="openFeature('sessionsModal')">Sessions</a>
+        <a href="#" onclick="openFeature('labModal')">Lab &amp; Software</a>
         <a href="#" onclick="openFeature('historyModal')">History</a>
+        <?php if ($reservationsEnabled): ?>
         <a href="#" onclick="openFeature('reservationModal')">Reservation</a>
+        <?php endif; ?>
         <a href="logout.php" class="logout-btn">Log out</a>
     </nav>
 </header>
@@ -245,8 +262,35 @@ $hasAnyFeedback->close();
             </div>
 
             <button class="save-btn" onclick="openModal()">✏️ Edit Profile</button>
+            <?php if ($reservationsEnabled && (int)$user['remaining_sessions'] > 0): ?>
             <button class="save-btn" style="margin-top: 10px; background: #0f4ad6;" onclick="openFeature('reservationModal')">🗓 Make Reservation</button>
+            <?php elseif (!$reservationsEnabled): ?>
+            <p style="margin-top:12px;color:#b45309;font-weight:600;">Reservations are currently disabled.</p>
+            <?php endif; ?>
         </div>
+    </section>
+
+    <section class="dashboard-card" style="grid-column: 1 / -1;">
+        <h3>📊 Sit-in Summary</h3>
+        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:14px; margin-top:12px;">
+            <div style="background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;padding:16px;border-radius:12px;text-align:center;">
+                <div style="font-size:24px;font-weight:700;"><?php echo app_format_hours_decimal($sitinSummary['total_minutes']); ?></div>
+                <div style="font-size:13px;opacity:.9;">Total Sit-in Hours</div>
+            </div>
+            <div style="background:linear-gradient(135deg,#10b981,#059669);color:#fff;padding:16px;border-radius:12px;text-align:center;">
+                <div style="font-size:24px;font-weight:700;"><?php echo (int)$sitinSummary['session_count']; ?></div>
+                <div style="font-size:13px;opacity:.9;">Number of Sessions</div>
+            </div>
+            <div style="background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;padding:16px;border-radius:12px;text-align:center;">
+                <div style="font-size:24px;font-weight:700;"><?php echo $sitinSummary['session_count'] > 0 ? number_format($sitinSummary['avg_minutes'] / 60, 1) : '0'; ?></div>
+                <div style="font-size:13px;opacity:.9;">Avg Session (hrs)</div>
+            </div>
+            <div style="background:linear-gradient(135deg,#8b5cf6,#7c3aed);color:#fff;padding:16px;border-radius:12px;text-align:center;">
+                <div style="font-size:24px;font-weight:700;"><?php echo $sitinSummary['longest_minutes'] > 0 ? app_format_duration_minutes($sitinSummary['longest_minutes']) : '—'; ?></div>
+                <div style="font-size:13px;opacity:.9;">Longest Session</div>
+            </div>
+        </div>
+        <p style="margin-top:12px;"><a href="#" onclick="openFeature('sessionsModal'); return false;" style="color:#0f4ad6;font-weight:600;">View full sessions table →</a></p>
     </section>
 
     <section class="dashboard-card announcement-card">
@@ -418,6 +462,76 @@ $hasAnyFeedback->close();
     </div>
 </div>
 
+<div id="sessionsModal" class="admin-modal">
+    <div class="admin-modal-content" style="max-width:900px; width:95%;">
+        <span class="close-modal" onclick="closeFeature('sessionsModal')">&times;</span>
+        <h3>📋 Sessions Table</h3>
+        <div class="table-wrap" style="max-height:400px; overflow:auto;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Time In</th>
+                        <th>Time Out</th>
+                        <th>Duration</th>
+                        <th>PC No.</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                <?php if (!empty($sessionsTableRows)): ?>
+                    <?php foreach ($sessionsTableRows as $sess): ?>
+                        <tr>
+                            <td><?php echo htmlspecialchars($sess['date']); ?></td>
+                            <td><?php echo htmlspecialchars($sess['time_in']); ?></td>
+                            <td><?php echo htmlspecialchars($sess['time_out']); ?></td>
+                            <td><?php echo htmlspecialchars($sess['duration']); ?></td>
+                            <td><?php echo htmlspecialchars($sess['pc_no']); ?></td>
+                            <td><?php echo htmlspecialchars($sess['status']); ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                <?php else: ?>
+                    <tr><td colspan="6" style="text-align:center;color:#666;">No sessions yet.</td></tr>
+                <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+        <button class="save-btn" onclick="closeFeature('sessionsModal')" style="margin-top:15px;">Close</button>
+    </div>
+</div>
+
+<div id="labModal" class="admin-modal">
+    <div class="admin-modal-content" style="max-width:800px; width:95%;">
+        <span class="close-modal" onclick="closeFeature('labModal')">&times;</span>
+        <h3>🖥️ Software Availability / Lab</h3>
+        <div style="max-height:420px;overflow-y:auto;margin-top:12px;">
+            <?php foreach ($labAvailability as $lab): ?>
+                <div style="border:1px solid #e5e7eb;border-radius:10px;padding:14px;margin-bottom:12px;background:#f8fafc;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+                        <strong><?php echo htmlspecialchars($lab['label']); ?></strong>
+                        <span style="font-size:13px;">
+                            <span style="color:#10b981;"><?php echo (int)$lab['available']; ?> vacant</span> ·
+                            <span style="color:#ef4444;"><?php echo (int)$lab['in_use']; ?> in use</span> ·
+                            <span style="color:#f59e0b;"><?php echo (int)$lab['maintenance']; ?> maintenance</span>
+                        </span>
+                    </div>
+                    <?php if (!empty($lab['software'])): ?>
+                        <p style="margin:10px 0 4px;font-size:13px;color:#64748b;">Software available:</p>
+                        <ul style="margin:0;padding-left:18px;font-size:14px;">
+                            <?php foreach ($lab['software'] as $sw): ?>
+                                <li><?php echo htmlspecialchars($sw['software_name']); ?><?php echo !empty($sw['version']) ? ' (' . htmlspecialchars($sw['version']) . ')' : ''; ?></li>
+                            <?php endforeach; ?>
+                        </ul>
+                    <?php else: ?>
+                        <p style="margin:10px 0 0;font-size:13px;color:#9ca3af;">No software list uploaded for this lab yet.</p>
+                    <?php endif; ?>
+                </div>
+            <?php endforeach; ?>
+        </div>
+        <button class="save-btn" onclick="closeFeature('labModal')" style="margin-top:15px;">Close</button>
+    </div>
+</div>
+
 <div id="historyModal" class="admin-modal">
     <div class="admin-modal-content" style="max-width:700px; width:95%;">
         <span class="close-modal" onclick="closeFeature('historyModal')">&times;</span>
@@ -525,6 +639,11 @@ $hasAnyFeedback->close();
             <div class="success-message" style="margin-bottom:12px; font-weight:bold; color:#065f46;"><?php echo htmlspecialchars($reservationMessage); ?></div>
         <?php endif; ?>
 
+        <?php if (!$reservationsEnabled): ?>
+            <p style="padding:12px;background:#fef3c7;color:#92400e;border-radius:8px;">Reservations are disabled by the administrator.</p>
+        <?php elseif ((int)$user['remaining_sessions'] <= 0): ?>
+            <p style="padding:12px;background:#fee2e2;color:#991b1b;border-radius:8px;">You have no sessions remaining.</p>
+        <?php else: ?>
         <form method="POST" class="reservation-form">
             <input type="hidden" name="action" value="reserve_sitin">
 
@@ -573,6 +692,7 @@ $hasAnyFeedback->close();
                 <button type="button" class="cancel-btn" onclick="closeFeature('reservationModal')">Cancel</button>
             </div>
         </form>
+        <?php endif; ?>
 
         <?php if (!empty($reservations)): ?>
             <h4 style="margin-top: 18px;">Your Recent Reservations</h4>
