@@ -1771,3 +1771,105 @@ table th, table td {
         justify-content: flex-start;
     }
 }
+
+/* STUDENT INFO LAYOUT - Separate sections for Student Info, Announcement, and Rules */
+.student-info-card {
+    grid-column: span 1;
+}
+
+.announcement-section {
+    grid-column: span 1;
+}
+
+.announcement-section h3 {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+}
+
+.rules-section {
+    grid-column: span 1;
+}
+
+.rules-section h3 {
+    background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+}
+
+.announcement-content-scroll {
+    max-height: 400px;
+    overflow-y: auto;
+    padding-right: 8px;
+}
+
+.rules-content-scroll {
+    max-height: 400px;
+    overflow-y: auto;
+    padding-right: 8px;
+}
+
+.rules-title {
+    font-size: 16px;
+    font-weight: bold;
+    margin-top: 0;
+    margin-bottom: 4px;
+    color: #1f2937;
+}
+
+.rules-subtitle {
+    font-size: 14px;
+    color: #6b7280;
+    margin-bottom: 12px;
+    font-weight: 500;
+}
+
+.rules-content-scroll ol {
+    margin: 0;
+    padding-left: 20px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: #4b5563;
+}
+
+.rules-content-scroll li {
+    margin-bottom: 8px;
+}
+
+.timeline-item {
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.timeline-item:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+
+.timeline-item div {
+    font-size: 13px;
+    margin-bottom: 4px;
+    color: #1f2937;
+    font-weight: 600;
+}
+
+.timeline-item p {
+    margin: 4px 0 0 0;
+    font-size: 13px;
+    color: #6b7280;
+}
+
+/* Responsive design for separate sections */
+@media (max-width: 1300px) {
+    .student-info-card,
+    .announcement-section,
+    .rules-section {
+        grid-column: span 1;
+    }
+}
+
+@media (max-width: 940px) {
+    .student-info-card,
+    .announcement-section,
+    .rules-section {
+        grid-column: 1 / -1;
+    }
+}
