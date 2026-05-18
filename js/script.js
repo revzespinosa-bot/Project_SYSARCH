@@ -125,3 +125,47 @@ document.addEventListener('DOMContentLoaded', function() {
         openFeature('searchModal');
     }
 });
+
+// ===== FEEDBACK & RATING FUNCTIONS =====
+// Open feedback modal with history ID
+function openFeedbackModal(historyId) {
+    const modal = document.getElementById("feedbackModal");
+    const historyIdField = document.getElementById("feedback_history_id");
+    
+    if (modal && historyIdField) {
+        historyIdField.value = historyId;
+        modal.style.display = "block";
+        document.body.style.overflow = "hidden";
+        
+        // Reset rating display
+        for (let i = 1; i <= 5; i++) {
+            const btn = document.getElementById("starbtn_" + i);
+            if (btn) {
+                btn.style.color = "#ccc";
+            }
+        }
+        
+        // Reset hidden rating field
+        document.getElementById("feedback_rating").value = "0";
+        
+        console.log("Feedback modal opened for history ID:", historyId);
+    }
+}
+
+// Set rating when clicking a star
+function setRating(rating) {
+    // Update hidden rating field
+    document.getElementById("feedback_rating").value = rating;
+    
+    // Update star display (1-5 stars only)
+    for (let i = 1; i <= 5; i++) {
+        const btn = document.getElementById("starbtn_" + i);
+        if (btn) {
+            btn.style.color = i <= rating ? "#fbbf24" : "#ccc";
+            btn.style.fontSize = i <= rating ? "36px" : "32px";
+            btn.style.transition = "all 0.2s";
+        }
+    }
+    
+    console.log("Rating set to:", rating);
+}

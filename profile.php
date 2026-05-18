@@ -168,7 +168,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $comment = trim($_POST['comment']);
     $history_id = intval($_POST['history_id']);
     
-    if ($rating >= 0 && $rating <= 5) {
+    if ($rating >= 1 && $rating <= 5) {
         // Check if feedback already exists for this history_id
         $checkStmt = $conn->prepare("SELECT id FROM feedback WHERE id_number = ? AND history_id = ?");
         $checkStmt->bind_param("si", $id, $history_id);
@@ -582,7 +582,7 @@ $hasAnyFeedback->close();
                             <td>
                                 <?php if ($hasFeedback): ?>
                                     <span style="font-size:16px;">
-                                        <?php for($i=0;$i<=5;$i++): ?>
+                                        <?php for($i=1;$i<=5;$i++): ?>
                                             <?php echo $i <= $fb['rating'] ? '⭐' : '☆'; ?>
                                         <?php endfor; ?>
                                     </span>
@@ -619,16 +619,16 @@ $hasAnyFeedback->close();
             <input type="hidden" name="action" value="submit_feedback" />
             <input type="hidden" name="history_id" id="feedback_history_id" />
             <div style="margin:20px 0;">
-                <?php for($i=0;$i<=5;$i++): ?>
+                <?php for($i=1;$i<=5;$i++): ?>
                     <button type="button" onclick="setRating(<?php echo $i; ?>)" 
                         style="font-size:32px; background:none; border:none; cursor:pointer; color:#ccc;" 
                         id="starbtn_<?php echo $i; ?>">
-                        <?php echo $i === 0 ? '☆' : '⭐'; ?>
+                        ☆
                     </button>
                 <?php endfor; ?>
             </div>
             <input type="hidden" name="rating" id="feedback_rating" value="0" required>
-            <p style="color:#666; font-size:14px;">Click a star to rate (0-5)</p>
+            <p style="color:#666; font-size:14px;">Click a star to rate (1-5)</p>
             <textarea name="comment" rows="2" placeholder="Optional comment..." style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px; font-family:inherit;"></textarea>
             <button type="submit" class="save-btn" style="margin-top:15px;">Submit</button>
         </form>
