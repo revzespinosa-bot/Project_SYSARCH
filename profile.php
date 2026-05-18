@@ -244,9 +244,10 @@ $hasAnyFeedback->close();
     </div>
     <?php endif; ?>
     
-    <section class="dashboard-card student-info-card">
+    <section class="dashboard-card student-info-card student-info-row">
         <h3>Student Information</h3>
-        <div class="dashboard-card-content">
+        <div class="student-info-layout">
+            <div class="student-info-main dashboard-card-content">
             <?php $hasPhoto = isset($user['photo']) && !empty($user['photo']); ?>
             <div class="profile-avatar-wrapper">
                 <img src="<?php echo $hasPhoto ? 'uploads/'.htmlspecialchars($user['photo']) : 'https://via.placeholder.com/160?text=No+Photo'; ?>" alt="Student Photo" class="profile-photo profile-avatar">
@@ -267,6 +268,42 @@ $hasAnyFeedback->close();
             <?php elseif (!$reservationsEnabled): ?>
             <p style="margin-top:12px;color:#b45309;font-weight:600;">Reservations are currently disabled.</p>
             <?php endif; ?>
+            </div>
+
+            <div class="student-info-side">
+                <div class="announcement-card student-info-side-panel">
+                    <h4>Announcement</h4>
+                    <div class="student-info-side-scroll">
+                        <?php if ($announcements && $announcements->num_rows > 0): ?>
+                            <?php while ($a = $announcements->fetch_assoc()): ?>
+                                <div class="timeline-item">
+                                    <div><strong><?php echo htmlspecialchars($a['title']); ?></strong> | <?php echo date('Y-M-d', strtotime($a['created_at'])); ?></div>
+                                    <p><?php echo htmlspecialchars($a['message']); ?></p>
+                                </div>
+                            <?php endwhile; ?>
+                        <?php else: ?>
+                            <div class="timeline-item">
+                                <div><strong>CCS Admin</strong> | <?php echo date('Y-M-d'); ?></div>
+                                <p>No announcements at this time.</p>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+
+                <div class="rules-card student-info-side-panel">
+                    <h4>Rules and Regulation</h4>
+                    <div class="rules-title">University of Cebu</div>
+                    <div class="rules-subtitle">COLLEGE OF INFORMATION & COMPUTER STUDIES</div>
+                    <div class="rules-scroll student-info-side-scroll">
+                        <ol>
+                            <li>Maintain silence, proper decorum, and discipline inside the laboratory.</li>
+                            <li>No food/drink; keep equipment clean and off personal devices.</li>
+                            <li>Games not allowed inside the lab—no disturbances permitted.</li>
+                            <li>Surfing only with instructor's permission; no unauthorized installs.</li>
+                        </ol>
+                    </div>
+                </div>
+            </div>
         </div>
     </section>
 
@@ -293,36 +330,6 @@ $hasAnyFeedback->close();
         <p style="margin-top:12px;"><a href="#" onclick="openFeature('sessionsModal'); return false;" style="color:#0f4ad6;font-weight:600;">View full sessions table →</a></p>
     </section>
 
-    <section class="dashboard-card announcement-card">
-        <h3>Announcement</h3>
-        <?php if ($announcements && $announcements->num_rows > 0): ?>
-            <?php while ($a = $announcements->fetch_assoc()): ?>
-                <div class="timeline-item">
-                    <div><strong><?php echo htmlspecialchars($a['title']); ?></strong> | <?php echo date('Y-M-d', strtotime($a['created_at'])); ?></div>
-                    <p><?php echo htmlspecialchars($a['message']); ?></p>
-                </div>
-            <?php endwhile; ?>
-        <?php else: ?>
-            <div class="timeline-item">
-                <div><strong>CCS Admin</strong> | <?php echo date('Y-M-d'); ?></div>
-                <p>No announcements at this time.</p>
-            </div>
-        <?php endif; ?>
-    </section>
-
-    <section class="dashboard-card rules-card">
-        <h3>Rules and Regulation</h3>
-        <div class="rules-title">University of Cebu</div>
-        <div class="rules-subtitle">COLLEGE OF INFORMATION & COMPUTER STUDIES</div>
-        <div class="rules-scroll">
-            <ol>
-                <li>Maintain silence, proper decorum, and discipline inside the laboratory.</li>
-                <li>No food/drink; keep equipment clean and off personal devices.</li>
-                <li>Games not allowed inside the lab—no disturbances permitted.</li>
-                <li>Surfing only with instructor's permission; no unauthorized installs.</li>
-            </ol>
-        </div>
-    </section>
 
 </main>
 
