@@ -776,9 +776,9 @@ $hasAnyFeedback->close();
         document.getElementById('feedback_history_id').value = historyId;
         document.getElementById('feedback_rating').value = 0;
         // Reset stars
-        for(let i=0; i<=5; i++) {
+        for(let i=1; i<=5; i++) {
             document.getElementById('starbtn_'+i).style.color = '#ccc';
-            document.getElementById('starbtn_'+i).innerHTML = i === 0 ? '☆' : '⭐';
+            document.getElementById('starbtn_'+i).innerHTML = '☆';
         }
         document.getElementById('feedbackModal').style.display = 'block';
         document.body.style.overflow = 'hidden';
@@ -786,7 +786,7 @@ $hasAnyFeedback->close();
     
     function setRating(rating) {
         document.getElementById('feedback_rating').value = rating;
-        for(let i=0; i<=5; i++) {
+        for(let i=1; i<=5; i++) {
             if(i <= rating) {
                 document.getElementById('starbtn_'+i).style.color = '#f59e0b';
                 document.getElementById('starbtn_'+i).innerHTML = '⭐';
