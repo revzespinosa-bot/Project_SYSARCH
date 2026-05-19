@@ -1,3 +1,29 @@
+// ===== HAMBURGER MENU =====
+function toggleMobileMenu() {
+    const hamburger = document.querySelector('.hamburger');
+    const nav = document.querySelector('.topbar-nav');
+    
+    if (hamburger && nav) {
+        hamburger.classList.toggle('active');
+        nav.classList.toggle('active');
+    }
+}
+
+// Close mobile menu when clicking on a nav link
+document.addEventListener('DOMContentLoaded', function() {
+    const navLinks = document.querySelectorAll('.topbar-nav a');
+    navLinks.forEach(link => {
+        link.addEventListener('click', function() {
+            const hamburger = document.querySelector('.hamburger');
+            const nav = document.querySelector('.topbar-nav');
+            if (hamburger && nav) {
+                hamburger.classList.remove('active');
+                nav.classList.remove('active');
+            }
+        });
+    });
+});
+
 // Hero Image Animation
 const img = document.querySelector(".hero-img");
 

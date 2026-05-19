@@ -715,12 +715,19 @@ $rejectedCount = $conn->query("SELECT COUNT(*) as cnt FROM sitin_reservations WH
     <!DOCTYPE html>
     <html>
     <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Admin Dashboard</title>
         <link rel="stylesheet" href="css/style.css">
     </head>
     <body>
      <header class="topbar">
-         <div class="topbar-left"><h2>Admin: Sit-in Monitoring</h2></div>
+         <div class="topbar-left"><h2>Admin Dashboard</h2></div>
+         <button class="hamburger" onclick="toggleMobileMenu()">
+             <span></span>
+             <span></span>
+             <span></span>
+         </button>
          <nav class="topbar-nav">
              <a href="admin_dashboard.php" class="active">Dashboard</a>
              <a href="logout.php">Logout</a>

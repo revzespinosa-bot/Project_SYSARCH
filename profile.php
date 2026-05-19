@@ -205,6 +205,8 @@ $hasAnyFeedback->close();
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>User Profile</title>
     <link rel="stylesheet" href="css/style.css">
     <script src="js/script.js"></script>
@@ -212,7 +214,12 @@ $hasAnyFeedback->close();
 <body>
 
 <header class="topbar">
-    <div class="topbar-left"><h2>Student Dashboard</h2></div>
+    <div class="topbar-left"><h2>Dashboard</h2></div>
+    <button class="hamburger" onclick="toggleMobileMenu()">
+        <span></span>
+        <span></span>
+        <span></span>
+    </button>
     <nav class="topbar-nav">
         <div class="dropdown">
             <button class="dropbtn">Notification ▼</button>

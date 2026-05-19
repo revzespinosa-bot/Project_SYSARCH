@@ -1,13 +1,20 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CCS Sit-in Monitoring</title>
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 
 <header class="topbar">
-    <div class="topbar-left"><h2>College of Computer Studies Sit-in Monitoring System</h2></div>
+    <div class="topbar-left"><h2>CCS Sit-in System</h2></div>
+    <button class="hamburger" onclick="toggleMobileMenu()">
+        <span></span>
+        <span></span>
+        <span></span>
+    </button>
     <nav class="topbar-nav">
         <a href="index.php">Home</a>
         <a href="login.php">Login</a>

@@ -7,6 +7,13 @@ body.register-page {
     min-height: 100vh;
 }
 
+@media (max-width: 767px) {
+    body.register-page {
+        background-size: cover;
+        background-position: center;
+    }
+}
+
 /* HEADER */
 /* --- Add this to your style.css --- */
 
@@ -436,25 +443,271 @@ header nav a {
     to { transform: translateY(0); opacity: 1; }
 }
 
-/* RESPONSIVE */
-@media (max-width: 600px) {
-    header {
+/* HAMBURGER MENU */
+.hamburger {
+    display: none;
+    flex-direction: column;
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 5px;
+}
+
+.hamburger span {
+    width: 25px;
+    height: 3px;
+    background: #fff;
+    margin: 5px 0;
+    border-radius: 3px;
+    transition: 0.3s;
+}
+
+.hamburger.active span:nth-child(1) {
+    transform: rotate(45deg) translate(10px, 10px);
+}
+
+.hamburger.active span:nth-child(2) {
+    opacity: 0;
+}
+
+.hamburger.active span:nth-child(3) {
+    transform: rotate(-45deg) translate(8px, -8px);
+}
+
+/* RESPONSIVE - Large Screens (Desktop) */
+@media (min-width: 1024px) {
+    .topbar-nav {
+        display: flex !important;
+    }
+}
+
+/* RESPONSIVE - Medium Screens (Tablets) */
+@media (max-width: 1023px) and (min-width: 768px) {
+    .topbar-left h2 {
+        font-size: 18px;
+    }
+    
+    .topbar-nav a {
+        padding: 6px 8px;
+        font-size: 14px;
+    }
+    
+    .hero {
+        gap: 20px;
+        padding: 30px;
+    }
+    
+    .hero h1 {
+        font-size: 32px;
+    }
+    
+    .hero p {
+        font-size: 16px;
+    }
+    
+    .hero-img {
+        max-width: 300px;
+    }
+    
+    .card {
+        width: 90%;
+        max-width: 400px;
+    }
+    
+    .dashboard-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+/* RESPONSIVE - Small Screens (Phones) */
+@media (max-width: 767px) {
+    /* Header/Navigation */
+    .topbar {
+        padding: 10px 16px;
+    }
+    
+    .topbar-left h2 {
+        font-size: 14px;
+    }
+    
+    .hamburger {
+        display: flex;
+    }
+    
+    .topbar-nav {
+        display: none;
+        position: absolute;
+        top: 60px;
+        left: 0;
+        right: 0;
         flex-direction: column;
-        gap: 10px;
+        background: linear-gradient(90deg, #002147, #1a52a2);
+        padding: 10px;
+        border-radius: 0 0 8px 8px;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        z-index: 499;
     }
     
-    header nav a {
-        margin: 5px;
+    .topbar-nav.active {
+        display: flex;
     }
     
+    .topbar-nav a,
+    .topbar-nav .dropbtn {
+        padding: 12px;
+        border-radius: 4px;
+        margin: 5px 0;
+        width: 100%;
+        text-align: left;
+    }
+    
+    /* Hero Section */
+    .hero {
+        flex-direction: column;
+        gap: 20px;
+        padding: 20px;
+        min-height: auto;
+    }
+    
+    .hero-text {
+        max-width: 100%;
+    }
+    
+    .hero h1 {
+        font-size: 28px;
+        margin-bottom: 10px;
+    }
+    
+    .hero p {
+        font-size: 16px;
+        margin-bottom: 15px;
+    }
+    
+    .hero-img {
+        max-width: 100%;
+        height: auto;
+    }
+    
+    /* Cards and Forms */
+    .card {
+        width: 95%;
+        margin: 30px auto;
+        padding: 20px;
+    }
+    
+    .card input {
+        width: 100% !important;
+        padding: 12px;
+        font-size: 16px;
+    }
+    
+    .card button {
+        padding: 12px;
+        font-size: 16px;
+    }
+    
+    /* Modal */
     .modal-content {
         width: 95%;
-        margin: 10% auto;
-        padding: 25px;
+        margin: 20% auto;
+        padding: 20px;
     }
     
     .modal-buttons {
         flex-direction: column;
+    }
+    
+    .save-btn,
+    .cancel-btn {
+        padding: 12px;
+        margin-bottom: 8px;
+    }
+    
+    /* Profile */
+    .profile-container {
+        min-height: auto;
+        padding: 10px;
+    }
+    
+    .empty-state {
+        padding: 30px 20px;
+    }
+    
+    .empty-state h2 {
+        font-size: 22px;
+    }
+    
+    .profile-photo,
+    .student-info-card .profile-photo {
+        width: 100px;
+        height: 100px;
+        max-width: 100px;
+        max-height: 100px;
+    }
+    
+    .profile-avatar {
+        width: 80px;
+        height: 80px;
+        max-width: 80px;
+        max-height: 80px;
+    }
+    
+    .form-group input {
+        font-size: 16px;
+        padding: 12px;
+    }
+    
+    /* Admin Sidebar */
+    .admin-layout {
+        grid-template-columns: 1fr;
+        gap: 15px;
+        padding: 10px;
+    }
+    
+    .admin-sidebar {
+        order: -1;
+    }
+    
+    .dashboard-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+        padding: 10px;
+        margin: 10px auto;
+    }
+    
+    .dashboard-card {
+        padding: 15px;
+    }
+    
+    /* Back button */
+    .back-btn2 {
+        top: 15px;
+        left: 15px;
+        padding: 8px 12px;
+        font-size: 12px;
+    }
+    
+    /* Tables */
+    table {
+        font-size: 12px;
+    }
+    
+    table th,
+    table td {
+        padding: 8px 4px;
+    }
+    
+    /* Buttons */
+    .btn {
+        padding: 10px 16px;
+        font-size: 14px;
+    }
+    
+    /* Register header */
+    .register-icon {
+        width: 60px;
+        height: 60px;
+        padding: 10px;
     }
 }
 
@@ -1603,6 +1856,119 @@ table th, table td {
     align-items: center;
     justify-content: center;
     font-size: 22px;
+}
+
+/* ===== RESPONSIVE TABLES ===== */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 15px 0;
+}
+
+table th,
+table td {
+    padding: 12px;
+    text-align: left;
+    border-bottom: 1px solid #ddd;
+}
+
+table th {
+    background: #002147;
+    color: white;
+    font-weight: bold;
+}
+
+table tr:hover {
+    background: #f5f5f5;
+}
+
+@media (max-width: 767px) {
+    /* Stack tables on mobile */
+    table {
+        font-size: 12px;
+    }
+    
+    table thead {
+        display: none;
+    }
+    
+    table tr {
+        display: block;
+        margin-bottom: 12px;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        padding: 8px;
+    }
+    
+    table td {
+        display: block;
+        padding: 8px;
+        position: relative;
+        text-align: right;
+        border: none;
+        padding-left: 50%;
+    }
+    
+    table td:before {
+        content: attr(data-label);
+        position: absolute;
+        left: 8px;
+        font-weight: bold;
+        text-align: left;
+        color: #002147;
+        width: 40%;
+    }
+}
+
+/* ===== RESPONSIVE IMAGES ===== */
+img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+}
+
+/* ===== RESPONSIVE DROPDOWNS ===== */
+@media (max-width: 767px) {
+    .dropdown-content {
+        position: fixed;
+        right: 10px;
+        left: 10px;
+        width: auto;
+        max-width: calc(100% - 20px);
+        top: auto !important;
+    }
+}
+
+/* ===== RESPONSIVE TEXT SIZES ===== */
+@media (max-width: 767px) {
+    h1 { font-size: 24px !important; }
+    h2 { font-size: 20px !important; }
+    h3 { font-size: 18px !important; }
+    p { font-size: 14px; line-height: 1.5; }
+}
+
+/* ===== LEADERBOARD STATS RESPONSIVE ===== */
+@media (max-width: 1023px) {
+    .leaderboard-stats {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 767px) {
+    .leaderboard-stats {
+        grid-template-columns: 1fr;
+    }
+    
+    .stat-card {
+        padding: 12px;
+    }
+    
+    .stat-icon {
+        width: 40px;
+        height: 40px;
+        font-size: 18px;
+    }
+}
 }
 
 .stat-info {

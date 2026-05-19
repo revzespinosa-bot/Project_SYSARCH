@@ -9,11 +9,13 @@ if(isset($_SESSION['id_number'])){
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login</title>
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body style="background-image: url('UC.png'); background-size: cover; background-position: center; background-repeat: no-repeat; min-height: 100vh; display: flex; justify-content: center; align-items: center; flex-direction: column;">
-    <a href="index.php" class="back-btn2" style="position: absolute; top: 20px; left: 20px;">⬅ Back to Home</a>
+    <a href="index.php" class="back-btn2" style="position: absolute; top: 20px; left: 20px;">⬅ Back</a>
 
     <div class="card" style="background: rgba(255,255,255,0.95);">
         <h2>Login</h2>
